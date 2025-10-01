@@ -22,7 +22,8 @@
       },
       "config": {
         "googleMapsApiKey": "AIzaSyBrbXX5PmDsDY2O6COmRmevJj1R1IC1L7E"
-      }
+      },
+      "bundleIdentifier": "com.fabricciodev-21.operacioneslaviandaapp"
     },
     "android": {
       "adaptiveIcon": {
@@ -61,12 +62,6 @@
         {
           "photosPermission": "Esta app necesita acceso a la galería para seleccionar fotos de perfil.",
           "cameraPermission": "Esta app necesita acceso a la cámara para tomar fotos de perfil."
-        }
-      ],
-      [
-        "react-native-maps",
-        {
-          "googleMapsApiKey": "AIzaSyBrbXX5PmDsDY2O6COmRmevJj1R1IC1L7E"
         }
       ]
     ],
