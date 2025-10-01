@@ -8,14 +8,17 @@ import {
   Alert,
   StyleSheet,
   SafeAreaView,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
+import { Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from './_layout';
 
 const COLORS = {
@@ -61,6 +64,7 @@ interface FormularioData {
     [key: string]: {
       cumple: boolean;
       observaciones: string;
+      fotos: string[]; // URIs de las fotos
     };
   };
   
@@ -122,7 +126,7 @@ export default function FormularioActaInicio() {
     hora_fin: '',
     areas: AREAS_PREDEFINIDAS.reduce((acc, area) => ({
       ...acc,
-      [area]: { cumple: false, observaciones: '' }
+      [area]: { cumple: false, observaciones: '', fotos: [] }
     }), {}),
     inventario: [
       { maquinaria_equipo: '', cantidad: '', descripcion_estado: '' }
@@ -349,7 +353,7 @@ export default function FormularioActaInicio() {
             hora_fin: formulario.hora_fin || '',
             areas: formulario.areas || AREAS_PREDEFINIDAS.reduce((acc, area) => ({
               ...acc,
-              [area]: { cumple: false, observaciones: '' }
+              [area]: { cumple: false, observaciones: '', fotos: [] }
             }), {}),
             inventario: formulario.inventario || [
               { maquinaria_equipo: '', cantidad: '', descripcion_estado: '' }
@@ -546,8 +550,7 @@ export default function FormularioActaInicio() {
 
                 // Crear nombre de archivo único
                 const fileName = `Acta_Inicio_${formData.consecutivo}_${new Date().getTime()}.pdf`;
-                const documentDirectory = FileSystem.documentDirectory;
-                const newUri = documentDirectory + fileName;
+                const newUri = `${Paths.document.uri}/${fileName}`;
 
                 // Mover el archivo a la carpeta de documentos
                 await FileSystem.moveAsync({
@@ -601,6 +604,134 @@ export default function FormularioActaInicio() {
         }
       }
     }));
+  };
+
+  // Función para solicitar permisos de cámara
+  const solicitarPermisosCamara = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permisos necesarios',
+        'Se necesitan permisos de cámara para tomar fotos'
+      );
+      return false;
+    }
+    return true;
+  };
+
+  // Función para tomar foto
+  const tomarFoto = async (area: string) => {
+    try {
+      const tienePermiso = await solicitarPermisosCamara();
+      if (!tienePermiso) return;
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        agregarFotoArea(area, uri);
+      }
+    } catch (error) {
+      console.error('Error al tomar foto:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
+    }
+  };
+
+  // Función para seleccionar foto de galería
+  const seleccionarFotoGaleria = async (area: string) => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permisos necesarios',
+          'Se necesitan permisos para acceder a la galería'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        agregarFotoArea(area, uri);
+      }
+    } catch (error) {
+      console.error('Error al seleccionar foto:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la foto');
+    }
+  };
+
+  // Función para agregar foto al área
+  const agregarFotoArea = (area: string, uri: string) => {
+    setFormData(prev => ({
+      ...prev,
+      areas: {
+        ...prev.areas,
+        [area]: {
+          ...prev.areas[area],
+          fotos: [...(prev.areas[area]?.fotos || []), uri]
+        }
+      }
+    }));
+  };
+
+  // Función para eliminar foto
+  const eliminarFoto = (area: string, index: number) => {
+    Alert.alert(
+      'Eliminar foto',
+      '¿Estás seguro de eliminar esta foto?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            setFormData(prev => ({
+              ...prev,
+              areas: {
+                ...prev.areas,
+                [area]: {
+                  ...prev.areas[area],
+                  fotos: prev.areas[area].fotos.filter((_, i) => i !== index)
+                }
+              }
+            }));
+          }
+        }
+      ]
+    );
+  };
+
+  // Función para mostrar opciones de foto
+  const mostrarOpcionesFoto = (area: string) => {
+    Alert.alert(
+      'Agregar foto',
+      'Selecciona una opción',
+      [
+        {
+          text: 'Tomar foto',
+          onPress: () => tomarFoto(area)
+        },
+        {
+          text: 'Seleccionar de galería',
+          onPress: () => seleccionarFotoGaleria(area)
+        },
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        }
+      ]
+    );
   };
 
   const handleInventarioChange = (index: number, field: keyof InventarioItem, value: string) => {
@@ -913,7 +1044,43 @@ export default function FormularioActaInicio() {
                 placeholderTextColor={COLORS.textSecondary}
                 multiline
                 numberOfLines={2}
+                editable={!esVisualizacion}
               />
+
+              {/* Botón para agregar fotos */}
+              {!esVisualizacion && (
+                <TouchableOpacity
+                  style={styles.addPhotoButton}
+                  onPress={() => mostrarOpcionesFoto(area)}
+                >
+                  <Ionicons name="camera" size={20} color={COLORS.primary} />
+                  <Text style={styles.addPhotoButtonText}>Agregar foto evidencia</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Mostrar fotos capturadas */}
+              {formData.areas[area]?.fotos && formData.areas[area].fotos.length > 0 && (
+                <View style={styles.fotosContainer}>
+                  <Text style={styles.fotosLabel}>
+                    📷 Fotos ({formData.areas[area].fotos.length})
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fotosScroll}>
+                    {formData.areas[area].fotos.map((uri, index) => (
+                      <View key={index} style={styles.fotoItem}>
+                        <Image source={{ uri }} style={styles.fotoPreview} />
+                        {!esVisualizacion && (
+                          <TouchableOpacity
+                            style={styles.deleteFotoButton}
+                            onPress={() => eliminarFoto(area, index)}
+                          >
+                            <Ionicons name="close-circle" size={24} color={COLORS.danger} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
           ))}
         </View>
@@ -1302,5 +1469,59 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  // Estilos para fotos
+  addPhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+    marginTop: 8,
+  },
+  addPhotoButtonText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.primary,
+  },
+  fotosContainer: {
+    marginTop: 12,
+  },
+  fotosLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+  },
+  fotosScroll: {
+    flexDirection: 'row',
+  },
+  fotoItem: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  fotoPreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: COLORS.border,
+  },
+  deleteFotoButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
 });
