@@ -9,6 +9,8 @@ import {
   StyleSheet,
   SafeAreaView,
   Image,
+  Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -108,6 +110,8 @@ export default function FormularioActaInicio() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [saving, setSaving] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<string>('');
   
   // Variables de modo
   const modo = params?.modo as string || 'crear';
@@ -501,6 +505,7 @@ export default function FormularioActaInicio() {
                             <th>Área</th>
                             <th>Cumple</th>
                             <th>Observaciones</th>
+                            <th>Fotos</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -509,6 +514,7 @@ export default function FormularioActaInicio() {
                               <td>${area}</td>
                               <td>${datos.cumple ? 'SÍ' : 'NO'}</td>
                               <td>${datos.observaciones || 'Sin observaciones'}</td>
+                              <td>${datos.fotos?.length || 0} foto(s)</td>
                             </tr>
                           `).join('')}
                         </tbody>
@@ -553,40 +559,39 @@ export default function FormularioActaInicio() {
 
                 console.log('📁 PDF generado en:', uri);
 
-                // Crear nombre de archivo único
-                const fileName = `Acta_Inicio_${formData.consecutivo}_${new Date().getTime()}.pdf`;
-                const newUri = `${Paths.document.uri}/${fileName}`;
+                // En web, abrir para imprimir
+                if (Platform.OS === 'web') {
+                  await Print.printAsync({
+                    html: htmlContent
+                  });
+                  Alert.alert('Éxito', 'PDF generado. Use la opción de imprimir de su navegador para guardarlo.');
+                  return;
+                }
 
-                // Mover el archivo a la carpeta de documentos
-                await FileSystem.moveAsync({
-                  from: uri,
-                  to: newUri
-                });
-
-                console.log('💾 PDF guardado en:', newUri);
-
-                // Mostrar opciones al usuario
-                Alert.alert(
-                  'PDF Generado',
-                  `PDF guardado como: ${fileName}\n\n¿Qué desea hacer?`,
-                  [
-                    { text: 'Solo Guardar', style: 'default' },
-                    {
-                      text: 'Compartir',
-                      onPress: async () => {
-                        if (await Sharing.isAvailableAsync()) {
-                          await Sharing.shareAsync(newUri);
-                        } else {
-                          Alert.alert('Info', 'PDF guardado en la carpeta de documentos de la aplicación');
-                        }
-                      }
-                    }
-                  ]
-                );
+                // En móvil, compartir directamente
+                const isAvailable = await Sharing.isAvailableAsync();
+                if (isAvailable) {
+                  const fileName = `Acta_Inicio_${formData.consecutivo}_${new Date().getTime()}.pdf`;
+                  
+                  await Sharing.shareAsync(uri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: 'Compartir PDF',
+                    UTI: 'com.adobe.pdf'
+                  });
+                  
+                  Alert.alert('Éxito', `PDF generado: ${fileName}`);
+                } else {
+                  Alert.alert(
+                    'PDF Generado',
+                    'El PDF ha sido generado pero no se puede compartir en este dispositivo.',
+                    [{ text: 'OK' }]
+                  );
+                }
 
               } catch (error) {
                 console.error('❌ Error en generación de PDF:', error);
-                Alert.alert('Error', 'No se pudo generar el PDF: ' + (error as Error).message);
+                const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+                Alert.alert('Error', `No se pudo generar el PDF:\n${errorMessage}`);
               }
             }
           }
@@ -790,6 +795,18 @@ export default function FormularioActaInicio() {
         }
       ]
     );
+  };
+
+  // Función para abrir foto en modal
+  const abrirFotoEnModal = (fotoUrl: string) => {
+    setSelectedPhoto(fotoUrl);
+    setModalVisible(true);
+  };
+
+  // Función para cerrar modal
+  const cerrarModal = () => {
+    setModalVisible(false);
+    setSelectedPhoto('');
   };
 
   const handleInventarioChange = (index: number, field: keyof InventarioItem, value: string) => {
@@ -1125,10 +1142,12 @@ export default function FormularioActaInicio() {
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fotosScroll}>
                     {formData.areas[area].fotos.map((foto, index) => (
                       <View key={index} style={styles.fotoItem}>
-                        <Image 
-                          source={{ uri: foto.url || foto.uri }} 
-                          style={styles.fotoPreview} 
-                        />
+                        <TouchableOpacity onPress={() => abrirFotoEnModal(foto.url || foto.uri)}>
+                          <Image 
+                            source={{ uri: foto.url || foto.uri }} 
+                            style={styles.fotoPreview} 
+                          />
+                        </TouchableOpacity>
                         {!esVisualizacion && (
                           <TouchableOpacity
                             style={styles.deleteFotoButton}
@@ -1263,6 +1282,41 @@ export default function FormularioActaInicio() {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* Modal para visualizar foto en tamaño completo */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={cerrarModal}
+      >
+        <View style={styles.modalContainer}>
+          <TouchableOpacity 
+            style={styles.modalBackground} 
+            activeOpacity={1} 
+            onPress={cerrarModal}
+          >
+            <View style={styles.modalContent}>
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={cerrarModal}
+              >
+                <Ionicons name="close-circle" size={36} color={COLORS.surface} />
+              </TouchableOpacity>
+              
+              <Image 
+                source={{ uri: selectedPhoto }} 
+                style={styles.fullSizeImage}
+                resizeMode="contain"
+              />
+              
+              <Text style={styles.modalHint}>
+                Toca fuera de la imagen para cerrar
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1584,5 +1638,45 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
+  },
+  // Estilos para el modal de visualización de fotos
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBackground: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    height: '80%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: -50,
+    right: 10,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+  },
+  fullSizeImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  modalHint: {
+    position: 'absolute',
+    bottom: -40,
+    color: COLORS.surface,
+    fontSize: 14,
+    opacity: 0.8,
   },
 });
