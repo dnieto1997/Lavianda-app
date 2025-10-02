@@ -112,6 +112,7 @@ export default function FormularioActaInicio() {
   const [saving, setSaving] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string>('');
+  const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
   
   // Variables de modo
   const modo = params?.modo as string || 'crear';
@@ -358,16 +359,30 @@ export default function FormularioActaInicio() {
                 observaciones: area.observaciones || '',
                 fotos: Array.isArray(area.fotos) 
                   ? area.fotos.map((foto: any) => {
-                      // Si la foto ya es un objeto con uri, url, ruta, dejarlo como está
+                      // Si la foto ya es un objeto con uri, url, ruta
                       if (typeof foto === 'object' && foto.url) {
-                        return foto;
+                        // Corregir dominio si está mal
+                        const urlCorregida = foto.url.replace(
+                          'operaciones.lavianda.com/',
+                          'operaciones.lavianda.com.co/'
+                        );
+                        return {
+                          ...foto,
+                          url: urlCorregida,
+                          uri: urlCorregida
+                        };
                       }
                       // Si es un string (URL), convertirlo a objeto
                       if (typeof foto === 'string') {
+                        // Corregir dominio si está mal
+                        const urlCorregida = foto.replace(
+                          'operaciones.lavianda.com/',
+                          'operaciones.lavianda.com.co/'
+                        );
                         return {
-                          uri: foto,
-                          url: foto,
-                          ruta: foto.replace('https://operaciones.lavianda.com.co/storage/', '')
+                          uri: urlCorregida,
+                          url: urlCorregida,
+                          ruta: urlCorregida.replace('https://operaciones.lavianda.com.co/storage/', '')
                         };
                       }
                       return foto;
@@ -1173,15 +1188,33 @@ export default function FormularioActaInicio() {
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fotosScroll}>
                     {formData.areas[area].fotos.map((foto, index) => {
                       const fotoUrl = foto.url || foto.uri;
+                      const imageKey = `${area}-${index}`;
+                      const hasError = imageErrors[imageKey];
+                      
                       console.log('🖼️ Mostrando foto:', fotoUrl);
+                      
                       return (
                         <View key={index} style={styles.fotoItem}>
-                          <TouchableOpacity onPress={() => abrirFotoEnModal(fotoUrl)}>
-                            <Image 
-                              source={{ uri: fotoUrl }} 
-                              style={styles.fotoPreview}
-                              onError={(error) => console.error('❌ Error cargando imagen:', error.nativeEvent.error)}
-                            />
+                          <TouchableOpacity 
+                            onPress={() => abrirFotoEnModal(fotoUrl)}
+                            disabled={hasError}
+                          >
+                            {hasError ? (
+                              <View style={[styles.fotoPreview, styles.fotoError]}>
+                                <Ionicons name="image-outline" size={40} color={COLORS.textSecondary} />
+                                <Text style={styles.fotoErrorText}>Error</Text>
+                              </View>
+                            ) : (
+                              <Image 
+                                source={{ uri: fotoUrl }} 
+                                style={styles.fotoPreview}
+                                onError={(error) => {
+                                  console.error('❌ Error cargando imagen:', error.nativeEvent.error);
+                                  console.error('❌ URL con error:', fotoUrl);
+                                  setImageErrors(prev => ({ ...prev, [imageKey]: true }));
+                                }}
+                              />
+                            )}
                           </TouchableOpacity>
                           {!esVisualizacion && (
                             <TouchableOpacity
@@ -1662,6 +1695,19 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 8,
     backgroundColor: COLORS.border,
+  },
+  fotoError: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+    borderStyle: 'dashed',
+  },
+  fotoErrorText: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    marginTop: 4,
   },
   deleteFotoButton: {
     position: 'absolute',
