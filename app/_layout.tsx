@@ -6,7 +6,7 @@ import * as SecureStore from "expo-secure-store"
 import { Platform, ActivityIndicator, View } from "react-native"
 import axios from "axios"
 import type { AuthContextType, AuthenticatedUser, User } from "../types/auth"
-import { LocationProvider } from "../contexts/LocationContext"
+import { LocationProvider, useLocation } from "../contexts/LocationContext"
 
 // --- Configuración de la API ---
 // ¡¡¡CAMBIA ESTA IP POR LA TUYA!!!
@@ -89,7 +89,13 @@ function useProtectedRoute(user: AuthenticatedUser | null, isReady: boolean) {
     const inProtectedRoute = 
       inAuthGroup ||
       segments.includes("registro-detalle") ||
-      segments.includes("formulario-acta-inicio")
+      segments.includes("formulario-acta-inicio") ||
+      segments.includes("formulario-inspeccion-supervision") ||
+      segments.includes("formulario-supervision-completo") ||
+      segments.includes("formulario-visita-simple") ||
+      segments.includes("formulario-evaluacion-servicio") ||
+      segments.includes("inspeccion-detalle") ||
+      segments.includes("evaluacion-servicio-detalle")
 
     console.log("🔍 Navegación - Segmentos:", segments)
     console.log("🔍 Usuario autenticado:", !!user)
@@ -117,8 +123,17 @@ function useProtectedRoute(user: AuthenticatedUser | null, isReady: boolean) {
 }
 
 export default function RootLayout() {
+  return (
+    <LocationProvider>
+      <RootLayoutWithLocation />
+    </LocationProvider>
+  )
+}
+
+function RootLayoutWithLocation() {
   const [user, setUser] = useState<AuthenticatedUser | null>(null)
   const [isReady, setIsReady] = useState(false)
+  const { stopBackgroundTracking, startTracking } = useLocation()
 
   useEffect(() => {
     const checkToken = async () => {
@@ -205,22 +220,35 @@ export default function RootLayout() {
   }
 
   return (
-    <LocationProvider>
-      <AuthContext.Provider
-        value={{
-          signIn: async (userData, token) => {
-            console.log("🔐 Usuario iniciando sesión:", userData.name)
-            await storeToken(token) // Almacenar token al hacer login
-            setUser({ token, userData })
-          },
-          signOut: async () => {
-            console.log("🚪 Usuario cerrando sesión")
-            await removeStoredToken() // Eliminar token al hacer logout
-            setUser(null)
-          },
-          user,
-        }}
-      >
+    <AuthContext.Provider
+      value={{
+        signIn: async (userData, token) => {
+          console.log("🔐 Usuario iniciando sesión:", userData.name)
+          await storeToken(token) // Almacenar token al hacer login
+          setUser({ token, userData })
+        },
+        signOut: async () => {
+          console.log("🚪 Usuario cerrando sesión")
+          
+          // Detener tracking en background
+          await stopBackgroundTracking()
+          
+          // Enviar punto de logout
+          if (user?.token) {
+            try {
+              await startTracking(user.token, 'logout')
+              console.log('✅ Punto de logout enviado')
+            } catch (error) {
+              console.error('❌ Error enviando logout:', error)
+            }
+          }
+          
+          await removeStoredToken() // Eliminar token al hacer logout
+          setUser(null)
+        },
+        user,
+      }}
+    >
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" />
           <Stack.Screen name="register" />
@@ -229,8 +257,7 @@ export default function RootLayout() {
           <Stack.Screen name="formulario-acta-inicio" options={{ headerShown: true, title: "Formulario Acta de Inicio" }} />
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="reset-password" options={{ headerShown: true, title: "Restablecer Contraseña" }} />
-        </Stack>
-      </AuthContext.Provider>
-    </LocationProvider>
+      </Stack>
+    </AuthContext.Provider>
   )
 }

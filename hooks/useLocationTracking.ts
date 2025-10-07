@@ -5,6 +5,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
+import { getSecureItem, setSecureItem } from '../utils/secureStorage';
 
 const API_BASE = 'https://operaciones.lavianda.com.co/api';
 const LOCATION_TASK_NAME = 'background-location-task';
@@ -29,7 +30,7 @@ interface TrackingSession {
 }
 
 // Definir la tarea de fondo para el tracking
-TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }: any) => {
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: any) => {
   if (error) {
     console.error('❌ Error en tarea de fondo:', error);
     return;
@@ -40,20 +41,20 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }: any) => {
     console.log('📍 Ubicación recibida en segundo plano:', locations);
     
     // Procesar ubicaciones en segundo plano
-    locations.forEach(async (location: any) => {
+    for (const location of locations) {
       try {
         await processBackgroundLocation(location);
       } catch (err) {
         console.error('❌ Error procesando ubicación en segundo plano:', err);
       }
-    });
+    }
   }
 });
 
 // Procesar ubicación capturada en segundo plano
 async function processBackgroundLocation(location: any) {
   try {
-    const token = await AsyncStorage.getItem('auth_token');
+    const token = await getSecureItem('auth_token');
     const sessionData = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
     
     if (!token || !sessionData) {
@@ -281,7 +282,7 @@ export const useLocationTracking = (token: string | null, isActive: boolean = fa
 
       // Guardar sesión en AsyncStorage
       await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-      await AsyncStorage.setItem('auth_token', token);
+      await setSecureItem('auth_token', token);
       
       setTrackingSession(session);
 

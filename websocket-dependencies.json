@@ -1,0 +1,14 @@
+{
+  "websocket-dependencies": {
+    "laravel-echo": "^1.16.1",
+    "pusher-js": "^8.4.0-rc2"
+  },
+  "websocket-dev-dependencies": {
+    "@types/pusher-js": "^5.1.0"
+  },
+  "installation-commands": [
+    "npm install laravel-echo pusher-js",
+    "npm install --save-dev @types/pusher-js"
+  ],
+  "readme": "Este archivo contiene las dependencias necesarias para WebSockets. Ejecutar: npm install laravel-echo pusher-js"
+}

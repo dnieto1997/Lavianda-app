@@ -46,6 +46,7 @@ interface RegistroDetalle {
     centro_costo: string;
     identificacion?: string;
     direccion?: string;
+    ciudad?: string; // ← Agrega esta propiedad
   };
   supervisor_id?: number;
   supervisor?: {
@@ -73,6 +74,47 @@ interface Formulario {
   };
   creado_por: number;
   creador?: {
+    id: number;
+    name: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+interface Inspeccion {
+  id: number;
+  registro_cliente_id: number;
+  consecutivo?: string;
+  user_id: number;
+  usuario?: {
+    id: number;
+    name: string;
+  };
+  fecha_inspeccion: string;
+  areas_inspeccionadas?: string;
+  observaciones_generales?: string;
+  estado?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface EvaluacionServicio {
+  id: number;
+  registro_cliente_id: number;
+  consecutivo?: string;
+  tipo_servicio: string;
+  cliente_zona: string;
+  telefono: string;
+  direccion: string;
+  ciudad: string;
+  periodo_evaluar: string;
+  fecha_evaluacion: string;
+  evaluador: string;
+  supervisor_asignado?: string;
+  calificacion: string;
+  observaciones?: string;
+  estado?: string;
+  usuario?: {
     id: number;
     name: string;
   };
@@ -125,6 +167,8 @@ export default function RegistroDetalleScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [registro, setRegistro] = useState<RegistroDetalle | null>(null);
   const [formularios, setFormularios] = useState<Formulario[]>([]);
+  const [inspecciones, setInspecciones] = useState<Inspeccion[]>([]); // NUEVO
+  const [evaluaciones, setEvaluaciones] = useState<EvaluacionServicio[]>([]);
   const [puedeCrearFormulario, setPuedeCrearFormulario] = useState(false);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [showCambiarSupervisorModal, setShowCambiarSupervisorModal] = useState(false);
@@ -159,6 +203,8 @@ export default function RegistroDetalleScreen() {
       const data = response.data;
       setRegistro(data.registro);
       setFormularios(data.formularios || []);
+      setInspecciones(data.inspecciones || []); // NUEVO: Cargar inspecciones
+      setEvaluaciones(data.evaluaciones_servicio || []);
       setPuedeCrearFormulario(data.puede_crear_formulario || false);
       setEmpleados(data.empleados || []);
     } catch (error) {
@@ -195,6 +241,23 @@ export default function RegistroDetalleScreen() {
     });
   };
 
+  const crearNuevaVisita = () => {
+    if (!registro) return;
+    
+    console.log('🔍 Creando nueva visita para registro:', registro.id);
+    
+    router.push({
+      pathname: '/formulario-supervision-completo',
+      params: { 
+        registroId: registro.id.toString(),
+        empresaId: registro.empresa_id.toString(),
+        empresaNombre: registro.empresa.nombre,
+        direccion: registro.empresa.direccion || '',
+        ciudad: registro.empresa.ciudad || '',
+      }
+    });
+  };
+
   const abrirFormulario = (formularioId: number) => {
     router.push({
       pathname: '/formulario-acta-inicio',
@@ -203,6 +266,28 @@ export default function RegistroDetalleScreen() {
         formularioId: formularioId,
         modo: 'ver'
       }
+    });
+  };
+
+  const abrirInspeccion = (inspeccionId: number) => {
+    router.push({
+      pathname: '/inspeccion-detalle',
+      params: { id: inspeccionId.toString() }
+    });
+  };
+
+  const abrirEvaluacion = (evaluacionId: number) => {
+    console.log('🔍 Navegando a evaluación de servicio:', evaluacionId);
+    router.push({
+      pathname: '/evaluacion-servicio-detalle',
+      params: { id: evaluacionId.toString() },
+    });
+  };
+
+  const crearNuevaEvaluacion = () => {
+    router.push({
+      pathname: '/formulario-evaluacion-servicio',
+      params: { registroId: registroId as string },
     });
   };
 
@@ -415,7 +500,8 @@ export default function RegistroDetalleScreen() {
       
       // Usar downloadAsync para descargar el archivo directamente
       const fileName = documento.nombre_original;
-      const fileUri = FileSystem.documentDirectory + fileName;
+      // TODO: Fix FileSystem.documentDirectory import issue
+      const fileUri = `/tmp/${fileName}`; // Temporary fix
       
       const downloadResult = await FileSystem.downloadAsync(
         `${API_BASE}/documentos/${documento.id}/descargar`,
@@ -564,7 +650,7 @@ export default function RegistroDetalleScreen() {
             {puedeCrearFormulario && (
               <TouchableOpacity style={styles.createButton} onPress={crearFormulario}>
                 <Ionicons name="add" size={20} color={COLORS.card} />
-                <Text style={styles.createButtonText}>Crear Formulario</Text>
+                <Text style={styles.createButtonText}>Crear Acta de Inicio</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -574,13 +660,31 @@ export default function RegistroDetalleScreen() {
               <Ionicons name="document-outline" size={48} color={COLORS.textSecondary} />
               <Text style={styles.emptyStateText}>
                 {puedeCrearFormulario 
-                  ? 'No hay formularios creados. Presiona "Crear Formulario" para comenzar.'
+                  ? 'No hay actas de inicio creadas. Presiona "Crear Acta de Inicio" para comenzar.'
                   : 'No hay formularios disponibles.'
                 }
               </Text>
             </View>
           ) : (
-            formularios.map((formulario) => (
+            <>
+              {/* Botón para crear visitas - Solo si hay actas de inicio */}
+              <View style={styles.visitaButtonContainer}>
+                <TouchableOpacity 
+                  style={styles.crearVisitaButton}
+                  onPress={crearNuevaVisita}
+                >
+                  <Ionicons name="clipboard-outline" size={24} color="white" />
+                  <Text style={styles.crearVisitaButtonText}>
+                    CREAR VISITA
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.visitaHint}>
+                  💡 Puedes crear cuantas visitas necesites
+                </Text>
+              </View>
+
+              {/* Lista de actas de inicio */}
+              {formularios.map((formulario) => (
               <View key={formulario.id} style={styles.formularioCard}>
                 <View style={styles.formularioHeader}>
                   <Text style={styles.formularioTitle}>ACTA DE INICIO DEL SERVICIO DE ASEO INTEGRAL Y CAFETERIA </Text>
@@ -621,7 +725,143 @@ export default function RegistroDetalleScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
                 </TouchableOpacity>
               </View>
-            ))
+            ))}
+
+              {/* Lista de inspecciones/supervisión */}
+              {inspecciones.map((inspeccion) => (
+              <View key={inspeccion.id} style={styles.formularioCard}>
+                <View style={styles.formularioHeader}>
+                  <Text style={styles.formularioTitle}>INFORME DE SUPERVISIÓN COMPLETO</Text>
+                </View>
+                
+                <View style={styles.formularioInfo}>
+                  <Text style={styles.formularioLabel}>Consecutivo:</Text>
+                  <Text style={styles.formularioValue}>
+                    {inspeccion.consecutivo || 'Sin consecutivo'}
+                  </Text>
+                </View>
+                
+                <View style={styles.formularioInfo}>
+                  <Text style={styles.formularioLabel}>Inspector:</Text>
+                  <Text style={styles.formularioValue}>
+                    {inspeccion.usuario?.name || 'Usuario desconocido'}
+                  </Text>
+                </View>
+                
+                <View style={styles.formularioInfo}>
+                  <Text style={styles.formularioLabel}>Fecha inspección:</Text>
+                  <Text style={styles.formularioValue}>
+                    {inspeccion.fecha_inspeccion 
+                      ? new Date(inspeccion.fecha_inspeccion).toLocaleDateString() 
+                      : 'Sin fecha'}
+                  </Text>
+                </View>
+
+                <View style={styles.formularioInfo}>
+                  <Text style={styles.formularioLabel}>Estado:</Text>
+                  <View style={[styles.estadoBadge, { 
+                    backgroundColor: inspeccion.estado === 'completado' ? COLORS.success : COLORS.warning 
+                  }]}>
+                    <Text style={styles.estadoText}>
+                      {inspeccion.estado || 'pendiente'}
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.openFormButton}
+                  onPress={() => abrirInspeccion(inspeccion.id)}
+                >
+                  <Text style={styles.openFormButtonText}>Abrir Inspección</Text>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
+                </TouchableOpacity>
+              </View>
+            ))}
+
+              {/* Sección Evaluaciones de Servicio */}
+              <View style={styles.sectionHeader}>
+                <Ionicons name="star" size={24} color={COLORS.primary} />
+                <Text style={styles.sectionTitle}>Evaluaciones de Servicio</Text>
+              </View>
+
+              <View style={styles.visitaButtonContainer}>
+                <TouchableOpacity 
+                  style={[styles.crearVisitaButton, { backgroundColor: '#9C27B0' }]}
+                  onPress={crearNuevaEvaluacion}
+                >
+                  <Ionicons name="star-outline" size={24} color="white" />
+                  <Text style={styles.crearVisitaButtonText}>
+                    CREAR EVALUACIÓN
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.visitaHint}>
+                  📋 Evalúa la calidad del servicio prestado
+                </Text>
+              </View>
+
+              {/* Lista de evaluaciones de servicio */}
+              {evaluaciones.map((evaluacion) => (
+              <View key={evaluacion.id} style={styles.formularioCard}>
+                <View style={styles.formularioHeader}>
+                  <Text style={styles.formularioTitle}>EVALUACIÓN DEL SERVICIO</Text>
+                </View>
+                
+                <View style={styles.formularioInfo}>
+                  <Text style={styles.formularioLabel}>Consecutivo:</Text>
+                  <Text style={styles.formularioValue}>
+                    {evaluacion.consecutivo || 'Sin consecutivo'}
+                  </Text>
+                </View>
+                
+                <View style={styles.formularioInfo}>
+                  <Text style={styles.formularioLabel}>Cliente/Zona:</Text>
+                  <Text style={styles.formularioValue}>
+                    {evaluacion.cliente_zona}
+                  </Text>
+                </View>
+                
+                <View style={styles.formularioInfo}>
+                  <Text style={styles.formularioLabel}>Calificación:</Text>
+                  <View style={[styles.estadoBadge, { 
+                    backgroundColor: evaluacion.calificacion === 'excelente' ? COLORS.success : 
+                                   evaluacion.calificacion === 'muy_bueno' ? '#66BB6A' :
+                                   evaluacion.calificacion === 'bueno' ? COLORS.warning :
+                                   evaluacion.calificacion === 'regular' ? '#FF7043' : COLORS.error
+                  }]}>
+                    <Text style={styles.estadoText}>
+                      {evaluacion.calificacion === 'muy_bueno' ? 'MUY BUENO' : evaluacion.calificacion.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.formularioInfo}>
+                  <Text style={styles.formularioLabel}>Fecha evaluación:</Text>
+                  <Text style={styles.formularioValue}>
+                    {evaluacion.fecha_evaluacion}
+                  </Text>
+                </View>
+
+                <View style={styles.formularioInfo}>
+                  <Text style={styles.formularioLabel}>Estado:</Text>
+                  <View style={[styles.estadoBadge, { 
+                    backgroundColor: evaluacion.estado === 'completado' ? COLORS.success : COLORS.warning 
+                  }]}>
+                    <Text style={styles.estadoText}>
+                      {evaluacion.estado || 'pendiente'}
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.openFormButton}
+                  onPress={() => abrirEvaluacion(evaluacion.id)}
+                >
+                  <Text style={styles.openFormButtonText}>Abrir Evaluación</Text>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
+                </TouchableOpacity>
+              </View>
+            ))}
+            </>
           )}
         </View>
       </ScrollView>
@@ -1052,6 +1292,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textPrimary,
   },
+  estadoBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  estadoText: {
+    color: COLORS.card,
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
   openFormButton: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1283,6 +1535,44 @@ const styles = StyleSheet.create({
   modalConfirmButtonText: {
     color: COLORS.card,
     fontWeight: '600',
+    fontSize: 16,
+  },
+  // Estilos para botón de visita
+  visitaButtonContainer: {
+    backgroundColor: '#E8F5E9',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    borderStyle: 'dashed',
+  },
+  crearVisitaButton: {
+    flexDirection: 'row',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  crearVisitaButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  visitaHint: {
+    fontSize: 12,
+    color: '#2E7D32',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   documentActions: {
     flexDirection: 'row',

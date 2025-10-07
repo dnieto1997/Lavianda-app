@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Image,
   Platform,
   Modal,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -23,6 +24,7 @@ import * as Print from 'expo-print';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from './_layout';
 import { subirFotoEvidencia, eliminarFotoEvidencia, obtenerUrlFoto } from '../services/evidenciasService';
+import SimpleSignaturePad from '../components/SimpleSignaturePad';
 
 const COLORS = {
   primary: '#1E3A8A',        // Azul corporativo más elegante
@@ -80,6 +82,15 @@ interface FormularioData {
   
   // Observaciones generales
   observaciones_generales: string;
+  
+  // Firma digital
+  firma_responsable?: string;
+  nombre_firmante?: string;
+  cedula_firmante?: string;
+  
+  // Timestamps
+  created_at?: string;
+  updated_at?: string;
 }
 
 const AREAS_PREDEFINIDAS = [
@@ -138,6 +149,11 @@ export default function FormularioActaInicio() {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string>('');
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
+  
+  // Estados para firma digital
+  const [modalFirmaVisible, setModalFirmaVisible] = useState(false);
+  const [firmaBase64, setFirmaBase64] = useState<string>('');
+  const signatureRef = useRef<any>(null);
   
   // Variables de modo
   const modo = params?.modo as string || 'crear';
@@ -431,7 +447,16 @@ export default function FormularioActaInicio() {
               { maquinaria_equipo: '', cantidad: '', descripcion_estado: '' }
             ],
             observaciones_generales: formulario.observaciones_generales || '',
+            firma_responsable: formulario.firma_responsable || '',
+            nombre_firmante: formulario.nombre_firmante || '',
+            cedula_firmante: formulario.cedula_firmante || '',
           });
+          
+          // Si hay firma guardada, también cargarla en el estado de firma
+          if (formulario.firma_responsable) {
+            console.log('✍️ Firma encontrada en el formulario');
+            setFirmaBase64(formulario.firma_responsable);
+          }
           
           console.log('✅ Formulario cargado exitosamente');
         } else {
@@ -610,6 +635,32 @@ export default function FormularioActaInicio() {
                       <div class="section-title">OBSERVACIONES GENERALES</div>
                       <div class="value">${formData.observaciones_generales || 'Sin observaciones'}</div>
                     </div>
+
+                    ${formData.firma_responsable || firmaBase64 ? `
+                    <div class="section">
+                      <div class="section-title">FIRMA DIGITAL</div>
+                      <div class="field">
+                        <div class="label">Firma del Responsable:</div>
+                        <div style="text-align: center; margin: 20px 0;">
+                          <img src="${formData.firma_responsable || firmaBase64}" 
+                               style="max-width: 300px; max-height: 150px; border: 1px solid #ddd; padding: 10px; background: white;" 
+                               alt="Firma" />
+                        </div>
+                        ${formData.nombre_firmante ? `
+                        <div class="field">
+                          <div class="label">Nombre del Firmante:</div>
+                          <div class="value">${formData.nombre_firmante}</div>
+                        </div>
+                        ` : ''}
+                        ${formData.cedula_firmante ? `
+                        <div class="field">
+                          <div class="label">Cédula del Firmante:</div>
+                          <div class="value">${formData.cedula_firmante}</div>
+                        </div>
+                        ` : ''}
+                      </div>
+                    </div>
+                    ` : ''}
                   </body>
                   </html>
                 `;
@@ -699,7 +750,7 @@ export default function FormularioActaInicio() {
       if (!tienePermiso) return;
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'images',
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
@@ -728,7 +779,7 @@ export default function FormularioActaInicio() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'images',
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
@@ -897,7 +948,48 @@ export default function FormularioActaInicio() {
     }
   };
 
-  const handleSubmit = async () => {
+  // Función para iniciar el proceso de firma
+  const iniciarProcesoDeFirma = () => {
+    console.log('🖊️ === INICIANDO PROCESO DE FIRMA ===');
+    console.log('📋 Empresa:', formData.empresa);
+    
+    if (!formData.empresa.trim()) {
+      console.log('❌ Validación falló: empresa vacía');
+      Alert.alert('Error', 'El campo empresa es obligatorio');
+      return;
+    }
+    
+    console.log('✅ Validación pasada, abriendo modal de firma');
+    setModalFirmaVisible(true);
+  };
+
+  // Función para guardar la firma y proceder con el guardado del formulario
+  const guardarFirma = (signature: string) => {
+    console.log('✍️ === FIRMA CAPTURADA ===');
+    console.log('📏 Longitud de la firma:', signature.length);
+    console.log('🔤 Primeros 100 caracteres:', signature.substring(0, 100));
+    
+    setFirmaBase64(signature);
+    setModalFirmaVisible(false);
+    
+    console.log('💾 Procediendo con el guardado del formulario...');
+    // Ahora sí proceder con el guardado
+    handleSubmit(signature);
+  };
+
+  // Función para limpiar la firma
+  const limpiarFirma = () => {
+    console.log('🧹 Limpiando firma...');
+    signatureRef.current?.clear();
+  };
+
+  // Función para cancelar la firma
+  const cancelarFirma = () => {
+    console.log('❌ Cancelando proceso de firma');
+    setModalFirmaVisible(false);
+  };
+
+  const handleSubmit = async (signatureData?: string) => {
     console.log('� === INICIO HANDLESUBMIT ===');
     console.log('�💾 Iniciando proceso de guardado...');
     console.log('📱 Estado actual del formulario:', formData);
@@ -939,6 +1031,7 @@ export default function FormularioActaInicio() {
       const dataToSend = {
         ...formData,
         registro_cliente_id: params?.registroId || null,
+        firma: signatureData || firmaBase64,
       };
 
       console.log('📋 Datos completos a enviar:', JSON.stringify(dataToSend, null, 2));
@@ -1328,8 +1421,49 @@ export default function FormularioActaInicio() {
             placeholderTextColor={COLORS.textSecondary}
             multiline
             numberOfLines={4}
+            editable={puedeEditar}
           />
         </View>
+
+        {/* Sección de Firma (visible si existe firma guardada o recién capturada) */}
+        {(formData.firma_responsable || firmaBase64) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>✍️ Firma Digital</Text>
+            <View style={styles.firmaPreviewContainer}>
+              <Image
+                source={{ uri: formData.firma_responsable || firmaBase64 }}
+                style={styles.firmaPreview}
+                resizeMode="contain"
+              />
+              <View style={styles.firmaInfoContainer}>
+                {(formData.nombre_firmante || user?.name) && (
+                  <Text style={styles.firmaInfo}>
+                    <Text style={styles.firmaInfoLabel}>Firmante: </Text>
+                    {formData.nombre_firmante || user?.name}
+                  </Text>
+                )}
+                {(formData.cedula_firmante || user?.cedula) && (
+                  <Text style={styles.firmaInfo}>
+                    <Text style={styles.firmaInfoLabel}>Cédula: </Text>
+                    {formData.cedula_firmante || user?.cedula}
+                  </Text>
+                )}
+                {formData.created_at && (
+                  <Text style={styles.firmaInfo}>
+                    <Text style={styles.firmaInfoLabel}>Fecha de firma: </Text>
+                    {new Date(formData.created_at).toLocaleDateString('es-CO', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Botones de acción */}
         {esVisualizacion ? (
@@ -1359,17 +1493,76 @@ export default function FormularioActaInicio() {
         ) : (
           <TouchableOpacity
             style={[styles.submitButton, saving && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
+            onPress={iniciarProcesoDeFirma}
             disabled={saving}
           >
             <Text style={styles.submitButtonText}>
-              {saving ? 'Guardando...' : 'Guardar Acta de Inicio'}
+              {saving ? 'Guardando...' : 'Firmar y Guardar Acta'}
             </Text>
           </TouchableOpacity>
         )}
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* Modal para capturar firma digital */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={modalFirmaVisible}
+        onRequestClose={cancelarFirma}
+      >
+        <SafeAreaView style={styles.firmaModalContainer}>
+          <View style={styles.firmaHeader}>
+            <Text style={styles.firmaTitle}>Firma del Responsable</Text>
+            <Text style={styles.firmaSubtitle}>Por favor, firme en el área a continuación</Text>
+          </View>
+
+          <View style={styles.firmaCanvasContainer}>
+            <SimpleSignaturePad
+              ref={signatureRef}
+              height={400}
+              strokeColor="#000000"
+              strokeWidth={3}
+            />
+          </View>
+
+          <View style={styles.firmaButtonsContainer}>
+            <TouchableOpacity
+              style={[styles.firmaButton, styles.firmaButtonSecondary]}
+              onPress={limpiarFirma}
+            >
+              <Ionicons name="refresh-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.firmaButtonTextSecondary}>Limpiar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.firmaButton, styles.firmaButtonDanger]}
+              onPress={cancelarFirma}
+            >
+              <Ionicons name="close-outline" size={20} color={COLORS.danger} />
+              <Text style={styles.firmaButtonTextDanger}>Cancelar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.firmaButton, styles.firmaButtonPrimary]}
+              onPress={() => {
+                if (signatureRef.current?.isEmpty()) {
+                  Alert.alert('Firma vacía', 'Por favor, firme antes de confirmar');
+                  return;
+                }
+                const signatureData = signatureRef.current?.toDataURL();
+                if (signatureData) {
+                  guardarFirma(signatureData);
+                }
+              }}
+            >
+              <Ionicons name="checkmark-outline" size={20} color={COLORS.surface} />
+              <Text style={styles.firmaButtonTextPrimary}>Confirmar</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
 
       {/* Modal para visualizar foto en tamaño completo */}
       <Modal
@@ -1779,5 +1972,126 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
     fontSize: 14,
     opacity: 0.8,
+  },
+  // Estilos para modal de firma
+  firmaModalContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  firmaHeader: {
+    padding: 20,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  firmaTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  firmaSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  firmaCanvasContainer: {
+    flex: 1,
+    margin: 20,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  firmaButtonsContainer: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  firmaButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  firmaButtonPrimary: {
+    backgroundColor: COLORS.primary,
+  },
+  firmaButtonSecondary: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  firmaButtonDanger: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+  },
+  firmaButtonTextPrimary: {
+    color: COLORS.surface,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  firmaButtonTextSecondary: {
+    color: COLORS.primary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  firmaButtonTextDanger: {
+    color: COLORS.danger,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Estilos para vista previa de firma
+  firmaPreviewContainer: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  firmaPreview: {
+    width: '100%',
+    height: 200,
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  firmaInfoContainer: {
+    gap: 6,
+  },
+  firmaInfo: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  firmaInfoLabel: {
+    fontWeight: '600',
+    color: COLORS.textPrimary,
   },
 });

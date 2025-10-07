@@ -429,6 +429,24 @@ export default function OperacionesScreen() {
     }
   };
 
+  // Función para crear inspección de supervisión
+  const crearInspeccionSupervision = (registro: RegistroCliente) => {
+    console.log('🔍 Creando inspección para registro:', registro.id);
+    try {
+      router.push({
+        pathname: '/formulario-inspeccion-supervision',
+        params: {
+          registroId: registro.id.toString(),
+          empresaId: registro.empresa_id.toString(),
+          empresaNombre: registro.empresa_nombre,
+        },
+      });
+    } catch (error) {
+      console.error('❌ Error en navegación a inspección:', error);
+      Alert.alert('Error', 'No se pudo abrir el formulario de inspección');
+    }
+  };
+
   const verFormulariosRegistro = async (registro: RegistroCliente) => {
     setRegistroSeleccionado(registro);
     setLoadingFormularios(true);
@@ -856,7 +874,7 @@ ${registro.ultimo_formulario ? `Último formulario: ${formatDate(registro.ultimo
             ) : formularios.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="document-outline" size={64} color={COLORS.textSecondary} />
-                <Text style={styles.emptyText}>No hay formularios creados</Text>
+                <Text style={styles.emptyText}>No hay actas de inicio creadas</Text>
                 <TouchableOpacity 
                   style={styles.createFirstFormButton}
                   onPress={() => {
@@ -867,11 +885,34 @@ ${registro.ultimo_formulario ? `Último formulario: ${formatDate(registro.ultimo
                   }}
                 >
                   <Ionicons name="document-text-outline" size={20} color="white" />
-                  <Text style={styles.createFirstFormButtonText}>CREAR PRIMER FORMULARIO</Text>
+                  <Text style={styles.createFirstFormButtonText}>CREAR ACTA DE INICIO</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              formularios.map((formulario, index) => (
+              <>
+                {/* Botón para crear visitas - Solo si hay actas de inicio */}
+                <View style={styles.inspeccionButtonContainer}>
+                  <TouchableOpacity 
+                    style={styles.crearInspeccionButton}
+                    onPress={() => {
+                      setShowFormulariosModal(false);
+                      if (registroSeleccionado) {
+                        crearInspeccionSupervision(registroSeleccionado);
+                      }
+                    }}
+                  >
+                    <Ionicons name="clipboard-outline" size={24} color="white" />
+                    <Text style={styles.crearInspeccionButtonText}>
+                      CREAR VISITA
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={styles.inspeccionHint}>
+                    💡 Puedes crear cuantas visitas necesites
+                  </Text>
+                </View>
+
+                {/* Lista de actas de inicio */}
+                {formularios.map((formulario, index) => (
                 <View key={formulario.id} style={styles.formularioItem}>
                   <View style={styles.formularioHeader}>
                     <View style={styles.formularioInfo}>
@@ -933,7 +974,8 @@ ${registro.ultimo_formulario ? `Último formulario: ${formatDate(registro.ultimo
                     </View>
                   )}
                 </View>
-              ))
+              ))}
+              </>
             )}
           </ScrollView>
         </View>
@@ -1388,6 +1430,44 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
     lineHeight: 18,
+  },
+  
+  // --- Estilos para botón de inspección ---
+  inspeccionButtonContainer: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    borderStyle: 'dashed',
+  },
+  crearInspeccionButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  crearInspeccionButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  inspeccionHint: {
+    fontSize: 12,
+    color: '#2E7D32',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   
   // --- Estilos para control de acceso ---

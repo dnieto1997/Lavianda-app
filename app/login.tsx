@@ -38,7 +38,7 @@ export default function LoginScreen() {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
-  const { startTracking } = useLocation();
+  const { startTracking, startBackgroundTracking } = useLocation();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -79,18 +79,19 @@ export default function LoginScreen() {
         
         // 🗺️ 3. INICIAR TRACKING DE UBICACIÓN
         try {
-          console.log(`🔐 Pasando token a startTracking: ${token ? 'Token presente' : 'TOKEN AUSENTE'}`);
+          console.log(`🔐 Iniciando tracking con token`);
           
-          // ✅ SOLUCIÓN: Pasamos el 'token' que acabamos de recibir directamente
-          // a la función startTracking, junto con el tipo 'login'.
+          // ✅ Paso 1: Enviar punto de login
           await startTracking(token, 'login');
+          console.log('✅ Punto de Login enviado');
           
-          console.log('✅✅ Punto de Login enviado exitosamente.');
+          // ✅ Paso 2: Iniciar tracking en background REAL (producción)
+          const sessionId = `session_${Date.now()}`;
+          await startBackgroundTracking(token, sessionId);
+          console.log('🎯 Tracking en background iniciado');
 
         } catch (trackingError) {
-          // El error ya se muestra en una Alerta desde el LocationContext,
-          // aquí solo lo registramos en la consola para depuración.
-          console.error('⚠️ El envío del punto de login falló. Revisa la alerta en pantalla si apareció.');
+          console.error('⚠️ Error en tracking:', trackingError);
         }
         
         console.log('✅ Usuario autenticado:', user.name, 'Rol:', user.role);

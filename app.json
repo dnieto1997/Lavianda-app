@@ -15,8 +15,12 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Esta app necesita acceso a la ubicación para registrar marcaciones de trabajo.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Esta app necesita acceso a la ubicación para registrar marcaciones de trabajo.",
+        "NSLocationWhenInUseUsageDescription": "La Vianda necesita acceso a tu ubicación para registrar tu asistencia y ubicación durante tu jornada laboral.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "La Vianda necesita acceso a tu ubicación en todo momento para registrar automáticamente tu recorrido durante el día.",
+        "NSLocationAlwaysUsageDescription": "La Vianda necesita acceso continuo a tu ubicación para registrar tu recorrido incluso cuando la app está en segundo plano.",
+        "UIBackgroundModes": [
+          "location"
+        ],
         "NSCameraUsageDescription": "Esta app necesita acceso a la cámara para tomar fotos de perfil.",
         "NSPhotoLibraryUsageDescription": "Esta app necesita acceso a la galería para seleccionar fotos de perfil."
       },
@@ -34,6 +38,9 @@
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
