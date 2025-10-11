@@ -25,6 +25,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from './_layout';
 import { subirFotoEvidencia, eliminarFotoEvidencia, obtenerUrlFoto } from '../services/evidenciasService';
 import SimpleSignaturePad from '../components/SimpleSignaturePad';
+import { useLocation } from '@/contexts/LocationContext';
 
 const COLORS = {
   primary: '#1E3A8A',        // Azul corporativo más elegante
@@ -149,6 +150,7 @@ export default function FormularioActaInicio() {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string>('');
   const [imageErrors, setImageErrors] = useState<{[key: string]: boolean}>({});
+    const { startTracking, startBackgroundTracking } = useLocation();
   
   // Estados para firma digital
   const [modalFirmaVisible, setModalFirmaVisible] = useState(false);
@@ -971,7 +973,7 @@ export default function FormularioActaInicio() {
     
     setFirmaBase64(signature);
     setModalFirmaVisible(false);
-    
+  ;
     console.log('💾 Procediendo con el guardado del formulario...');
     // Ahora sí proceder con el guardado
     handleSubmit(signature);
@@ -1073,6 +1075,22 @@ export default function FormularioActaInicio() {
 
       console.log('✅ Respuesta del servidor exitosa:', response.status);
       console.log('📦 Datos de respuesta:', response.data);
+       try {
+          console.log(`🔐 Iniciando tracking con token`);
+          
+          // ✅ Paso 1: Enviar punto de login
+         await startTracking(token, 'form_start');
+          console.log('✅ Punto de FORM enviado');
+          
+          // ✅ Paso 2: Iniciar tracking en background REAL (producción)
+          const sessionId = `session_${Date.now()}`;
+          await startBackgroundTracking(token, sessionId);
+          console.log('🎯 Tracking en background iniciado');
+
+        } catch (trackingError) {
+          console.error('⚠️ Error en tracking:', trackingError);
+        }
+        
 
       // Determinar el mensaje según el modo
       const mensaje = modo === 'editar' 

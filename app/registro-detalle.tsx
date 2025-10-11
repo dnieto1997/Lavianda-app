@@ -102,17 +102,34 @@ interface EvaluacionServicio {
   id: number;
   registro_cliente_id: number;
   consecutivo?: string;
-  tipo_servicio: string;
+  
+  // Campos reales del backend
+  servicio_mantenimiento: boolean;
+  servicio_otro: boolean;
+  servicio_cual?: string;
+  
   cliente_zona: string;
   telefono: string;
   direccion: string;
   ciudad: string;
-  periodo_evaluar: string;
+  periodo_inicio?: string;
+  periodo_fin?: string;
   fecha_evaluacion: string;
-  evaluador: string;
+  nombre_evaluador: string;
+  cargo_evaluador?: string;
   supervisor_asignado?: string;
-  calificacion: string;
+  
+  // Calificaciones
+  calificacion_excelente?: number;
+  calificacion_muy_bueno?: number;
+  calificacion_bueno?: number;
+  calificacion_regular?: number;
+  calificacion_malo?: number;
+  
   observaciones?: string;
+  firma_cliente_base64?: string;
+  nombre_firma?: string;
+  fecha_firma?: string;
   estado?: string;
   usuario?: {
     id: number;
@@ -171,6 +188,93 @@ export default function RegistroDetalleScreen() {
   const [evaluaciones, setEvaluaciones] = useState<EvaluacionServicio[]>([]);
   const [puedeCrearFormulario, setPuedeCrearFormulario] = useState(false);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
+
+  // Estados para paginación y optimización
+  const [formulariosPagina, setFormulariosPagina] = useState(1);
+  const [evaluacionesPagina, setEvaluacionesPagina] = useState(1);
+  const [cargandoMasFormularios, setCargandoMasFormularios] = useState(false);
+  const [cargandoMasEvaluaciones, setCargandoMasEvaluaciones] = useState(false);
+  const [totalFormularios, setTotalFormularios] = useState(0);
+  const [totalEvaluaciones, setTotalEvaluaciones] = useState(0);
+  const ITEMS_POR_PAGINA = 10;
+
+  // Funciones auxiliares para evaluaciones
+  const getTipoServicio = (evaluacion: EvaluacionServicio): string => {
+    if (evaluacion.servicio_mantenimiento) return 'MANTENIMIENTO';
+    if (evaluacion.servicio_otro) return evaluacion.servicio_cual ? evaluacion.servicio_cual.toUpperCase() : 'OTRO';
+    return 'NO ESPECIFICADO';
+  };
+
+  const getCalificacion = (evaluacion: EvaluacionServicio): string => {
+    if (evaluacion.calificacion_excelente) return 'excelente';
+    if (evaluacion.calificacion_muy_bueno) return 'muy_bueno';
+    if (evaluacion.calificacion_bueno) return 'bueno';
+    if (evaluacion.calificacion_regular) return 'regular';
+    if (evaluacion.calificacion_malo) return 'malo';
+    return 'no_especificado';
+  };
+
+  const getCalificacionTexto = (evaluacion: EvaluacionServicio): string => {
+    if (evaluacion.calificacion_excelente) return 'EXCELENTE';
+    if (evaluacion.calificacion_muy_bueno) return 'MUY BUENO';
+    if (evaluacion.calificacion_bueno) return 'BUENO';
+    if (evaluacion.calificacion_regular) return 'REGULAR';
+    if (evaluacion.calificacion_malo) return 'MALO';
+    return 'NO ESPECIFICADO';
+  };
+
+  // Debug: Monitorear cambios en evaluaciones
+  React.useEffect(() => {
+    console.log('🔄 Estado de evaluaciones actualizado:');
+    console.log('📊 Cantidad en estado:', evaluaciones.length);
+    console.log('📋 Evaluaciones:', evaluaciones);
+  }, [evaluaciones]);
+
+  // Función para cargar más formularios (paginación)
+  const cargarMasFormularios = async () => {
+    if (cargandoMasFormularios || formularios.length >= totalFormularios) return;
+    
+    setCargandoMasFormularios(true);
+    try {
+      const response = await axios.get(
+        `${API_BASE}/registros-clientes/${registroId}/formularios?pagina=${formulariosPagina + 1}&limite=${ITEMS_POR_PAGINA}`,
+        { headers: { 'Authorization': `Bearer ${user?.token}` } }
+      );
+      
+      const nuevosFormularios = response.data.formularios || [];
+      setFormularios(prev => [...prev, ...nuevosFormularios]);
+      setFormulariosPagina(prev => prev + 1);
+      
+      console.log('📄 Cargados', nuevosFormularios.length, 'formularios más');
+    } catch (error) {
+      console.error('Error al cargar más formularios:', error);
+    } finally {
+      setCargandoMasFormularios(false);
+    }
+  };
+
+  // Función para cargar más evaluaciones (paginación)
+  const cargarMasEvaluaciones = async () => {
+    if (cargandoMasEvaluaciones || evaluaciones.length >= totalEvaluaciones) return;
+    
+    setCargandoMasEvaluaciones(true);
+    try {
+      const response = await axios.get(
+        `${API_BASE}/registros-clientes/${registroId}/evaluaciones?pagina=${evaluacionesPagina + 1}&limite=${ITEMS_POR_PAGINA}`,
+        { headers: { 'Authorization': `Bearer ${user?.token}` } }
+      );
+      
+      const nuevasEvaluaciones = response.data.evaluaciones || [];
+      setEvaluaciones(prev => [...prev, ...nuevasEvaluaciones]);
+      setEvaluacionesPagina(prev => prev + 1);
+      
+      console.log('⭐ Cargadas', nuevasEvaluaciones.length, 'evaluaciones más');
+    } catch (error) {
+      console.error('Error al cargar más evaluaciones:', error);
+    } finally {
+      setCargandoMasEvaluaciones(false);
+    }
+  };
   const [showCambiarSupervisorModal, setShowCambiarSupervisorModal] = useState(false);
   
   // Estados para sistema de documentos
@@ -201,12 +305,43 @@ export default function RegistroDetalleScreen() {
       });
 
       const data = response.data;
+      console.log('📋 Datos del backend recibidos:');
+      console.log('📄 Keys disponibles:', Object.keys(data));
+      console.log('⭐ Evaluaciones raw:', data.evaluaciones);
+      console.log('⭐ Tipo de evaluaciones:', typeof data.evaluaciones);
+      console.log('⭐ Cantidad evaluaciones:', data.evaluaciones?.length || 0);
+      console.log('🔍 Registro ID buscado:', registroId);
+      
+      // Verificar si las evaluaciones tienen el registro_cliente_id correcto
+      if (data.evaluaciones && Array.isArray(data.evaluaciones)) {
+        console.log('📊 Evaluaciones detalladas:');
+        data.evaluaciones.forEach((evaluacion: any, index: number) => {
+          console.log(`  ${index + 1}. ID: ${evaluacion.id}, Registro: ${evaluacion.registro_cliente_id}, Cliente: ${evaluacion.cliente_zona}`);
+        });
+      }
+      
       setRegistro(data.registro);
-      setFormularios(data.formularios || []);
-      setInspecciones(data.inspecciones || []); // NUEVO: Cargar inspecciones
-      setEvaluaciones(data.evaluaciones_servicio || []);
+      
+      // Configurar formularios con paginación
+      const formulariosPaginados = data.formularios?.slice(0, ITEMS_POR_PAGINA) || [];
+      setFormularios(formulariosPaginados);
+      setTotalFormularios(data.total_formularios || data.formularios?.length || 0);
+      setFormulariosPagina(1);
+      
+      setInspecciones(data.inspecciones || []);
+      
+      // Configurar evaluaciones con paginación  
+      const evaluacionesPaginadas = data.evaluaciones?.slice(0, ITEMS_POR_PAGINA) || [];
+      setEvaluaciones(evaluacionesPaginadas);
+      setTotalEvaluaciones(data.total_evaluaciones || data.evaluaciones?.length || 0);
+      setEvaluacionesPagina(1);
+      
       setPuedeCrearFormulario(data.puede_crear_formulario || false);
       setEmpleados(data.empleados || []);
+      
+      console.log('📊 Totales configurados:');
+      console.log('📄 Formularios cargados:', formulariosPaginados.length, 'de', data.total_formularios || data.formularios?.length || 0);
+      console.log('⭐ Evaluaciones cargadas:', evaluacionesPaginadas.length, 'de', data.total_evaluaciones || data.evaluaciones?.length || 0);
     } catch (error) {
       console.error('Error al cargar detalle del registro:', error);
       Alert.alert('Error', 'No se pudo cargar la información del registro');
@@ -667,7 +802,7 @@ export default function RegistroDetalleScreen() {
             </View>
           ) : (
             <>
-              {/* Botón para crear visitas - Solo si hay actas de inicio */}
+              {/* Botones para crear visitas y evaluaciones */}
               <View style={styles.visitaButtonContainer}>
                 <TouchableOpacity 
                   style={styles.crearVisitaButton}
@@ -678,8 +813,23 @@ export default function RegistroDetalleScreen() {
                     CREAR VISITA
                   </Text>
                 </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.crearVisitaButton, { backgroundColor: '#9C27B0' }]}
+                  onPress={crearNuevaEvaluacion}
+                >
+                  <Text style={styles.crearVisitaButtonText}>
+                    CREAR EVALUACIÓN
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.hintsContainer}>
                 <Text style={styles.visitaHint}>
                   💡 Puedes crear cuantas visitas necesites
+                </Text>
+                <Text style={styles.visitaHint}>
+                  📋 Evalúa la calidad del servicio prestado
                 </Text>
               </View>
 
@@ -726,6 +876,26 @@ export default function RegistroDetalleScreen() {
                 </TouchableOpacity>
               </View>
             ))}
+
+            {/* Botón Ver más formularios */}
+            {formularios.length < totalFormularios && (
+              <TouchableOpacity
+                style={styles.verMasButton}
+                onPress={cargarMasFormularios}
+                disabled={cargandoMasFormularios}
+              >
+                {cargandoMasFormularios ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : (
+                  <>
+                    <Text style={styles.verMasText}>
+                      Ver más formularios ({formularios.length} de {totalFormularios})
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color={COLORS.primary} />
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
 
               {/* Lista de inspecciones/supervisión */}
               {inspecciones.map((inspeccion) => (
@@ -784,23 +954,8 @@ export default function RegistroDetalleScreen() {
                 <Text style={styles.sectionTitle}>Evaluaciones de Servicio</Text>
               </View>
 
-              <View style={styles.visitaButtonContainer}>
-                <TouchableOpacity 
-                  style={[styles.crearVisitaButton, { backgroundColor: '#9C27B0' }]}
-                  onPress={crearNuevaEvaluacion}
-                >
-                  <Ionicons name="star-outline" size={24} color="white" />
-                  <Text style={styles.crearVisitaButtonText}>
-                    CREAR EVALUACIÓN
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.visitaHint}>
-                  📋 Evalúa la calidad del servicio prestado
-                </Text>
-              </View>
-
               {/* Lista de evaluaciones de servicio */}
-              {evaluaciones.map((evaluacion) => (
+              {evaluaciones.length > 0 ? evaluaciones.map((evaluacion) => (
               <View key={evaluacion.id} style={styles.formularioCard}>
                 <View style={styles.formularioHeader}>
                   <Text style={styles.formularioTitle}>EVALUACIÓN DEL SERVICIO</Text>
@@ -823,13 +978,13 @@ export default function RegistroDetalleScreen() {
                 <View style={styles.formularioInfo}>
                   <Text style={styles.formularioLabel}>Calificación:</Text>
                   <View style={[styles.estadoBadge, { 
-                    backgroundColor: evaluacion.calificacion === 'excelente' ? COLORS.success : 
-                                   evaluacion.calificacion === 'muy_bueno' ? '#66BB6A' :
-                                   evaluacion.calificacion === 'bueno' ? COLORS.warning :
-                                   evaluacion.calificacion === 'regular' ? '#FF7043' : COLORS.error
+                    backgroundColor: getCalificacion(evaluacion) === 'excelente' ? COLORS.success : 
+                                   getCalificacion(evaluacion) === 'muy_bueno' ? '#66BB6A' :
+                                   getCalificacion(evaluacion) === 'bueno' ? COLORS.warning :
+                                   getCalificacion(evaluacion) === 'regular' ? '#FF7043' : COLORS.error
                   }]}>
                     <Text style={styles.estadoText}>
-                      {evaluacion.calificacion === 'muy_bueno' ? 'MUY BUENO' : evaluacion.calificacion.toUpperCase()}
+                      {getCalificacionTexto(evaluacion)}
                     </Text>
                   </View>
                 </View>
@@ -860,7 +1015,37 @@ export default function RegistroDetalleScreen() {
                   <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
                 </TouchableOpacity>
               </View>
-            ))}
+            )) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="star-outline" size={48} color={COLORS.textSecondary} />
+                <Text style={styles.emptyStateText}>
+                  No hay evaluaciones de servicio
+                </Text>
+                <Text style={styles.emptyStateText}>
+                  Presiona "CREAR EVALUACIÓN" para comenzar
+                </Text>
+              </View>
+            )}
+
+            {/* Botón Ver más evaluaciones */}
+            {evaluaciones.length > 0 && evaluaciones.length < totalEvaluaciones && (
+              <TouchableOpacity
+                style={styles.verMasButton}
+                onPress={cargarMasEvaluaciones}
+                disabled={cargandoMasEvaluaciones}
+              >
+                {cargandoMasEvaluaciones ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : (
+                  <>
+                    <Text style={styles.verMasText}>
+                      Ver más evaluaciones ({evaluaciones.length} de {totalEvaluaciones})
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color={COLORS.primary} />
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
             </>
           )}
         </View>
@@ -1545,9 +1730,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 2,
     borderColor: '#4CAF50',
-    borderStyle: 'dashed',
+    flexDirection: 'row',
+    gap: 10,
   },
   crearVisitaButton: {
+    flex: 1,
     flexDirection: 'row',
     backgroundColor: '#4CAF50',
     paddingVertical: 14,
@@ -1585,5 +1772,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.primary,
+  },
+  hintsContainer: {
+    gap: 5,
+    marginBottom: 10,
+  },
+  verMasButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 20,
+    gap: 8,
+  },
+  verMasText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

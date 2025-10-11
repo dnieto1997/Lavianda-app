@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react"
 import { Stack, useRouter, useSegments } from "expo-router"
 import * as SecureStore from "expo-secure-store"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 import { Platform, ActivityIndicator, View } from "react-native"
 import axios from "axios"
 import type { AuthContextType, AuthenticatedUser, User } from "../types/auth"
@@ -45,10 +46,12 @@ const storeToken = async (token: string): Promise<void> => {
   try {
     if (Platform.OS === "web") {
       localStorage.setItem("userToken", token)
+      localStorage.setItem("authToken", token) // También para el mapa
     } else {
       await SecureStore.setItemAsync("userToken", token)
+      await AsyncStorage.setItem("authToken", token) // También para el mapa
     }
-    console.log("💾 Token almacenado correctamente")
+    console.log("💾 Token almacenado correctamente (userToken y authToken)")
   } catch (error) {
     console.log("❌ Error al almacenar token:", error)
   }
@@ -58,10 +61,12 @@ const removeStoredToken = async (): Promise<void> => {
   try {
     if (Platform.OS === "web") {
       localStorage.removeItem("userToken")
+      localStorage.removeItem("authToken")
     } else {
       await SecureStore.deleteItemAsync("userToken")
+      await AsyncStorage.removeItem("authToken")
     }
-    console.log("🗑️ Token eliminado correctamente")
+    console.log("🗑️ Token eliminado correctamente (userToken y authToken)")
   } catch (error) {
     console.log("❌ Error al eliminar token:", error)
   }
@@ -88,6 +93,7 @@ function useProtectedRoute(user: AuthenticatedUser | null, isReady: boolean) {
     // Definir rutas protegidas que usuarios autenticados pueden acceder
     const inProtectedRoute = 
       inAuthGroup ||
+      segments.includes("admin-map-simple") ||
       segments.includes("registro-detalle") ||
       segments.includes("formulario-acta-inicio") ||
       segments.includes("formulario-inspeccion-supervision") ||

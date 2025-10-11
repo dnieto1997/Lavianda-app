@@ -1,5 +1,3 @@
-// --- START OF FILE app/(tabs)/index.tsx (Nueva Pantalla de Inicio) ---
-
 import React from 'react';
 import {
   View,
@@ -9,15 +7,15 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
-  SafeAreaView,
   Alert,
+  Platform,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../_layout';
 import { Ionicons } from '@expo/vector-icons';
-import { Link, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useLocation } from '../../contexts/LocationContext';
 
-// --- Paleta de Colores ---
 const COLORS = {
   primary: '#C62828',
   secondary: '#1976D2',
@@ -29,9 +27,8 @@ const COLORS = {
   employee: '#4CAF50',
 };
 
-// --- Componente de Tarjeta de Acción Reutilizable ---
 const ActionCard = ({ title, icon, color, description, onPress }: any) => (
-  <TouchableOpacity style={styles.card} onPress={onPress}>
+  <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
     <View style={[styles.cardIconContainer, { backgroundColor: color }]}>
       <Ionicons name={icon} size={28} color="#fff" />
     </View>
@@ -47,6 +44,7 @@ export default function HomeScreen() {
   const { signOut, user } = useAuth();
   const { startTracking } = useLocation();
   const router = useRouter();
+  const insets = useSafeAreaInsets(); // obtiene márgenes seguros dinámicos
 
   const handleLogout = () => {
     Alert.alert(
@@ -71,18 +69,20 @@ export default function HomeScreen() {
   };
 
   if (!user?.userData) {
-    return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
   }
 
   const { name, role, profile_photo_url } = user.userData;
   const isAdmin = role === 'admin' || role === 'root';
-  
-  // Validar que name sea una cadena
   const displayName = typeof name === 'string' ? name : 'Usuario';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+    <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top || 20 }]}>
+      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 30 }]}>
         
         {/* --- Encabezado de Bienvenida --- */}
         <View style={styles.header}>
@@ -92,17 +92,20 @@ export default function HomeScreen() {
           </View>
           <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
             <Image
-              source={{ uri: profile_photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&color=FFFFFF&background=C62828&bold=true` }}
+              source={{
+                uri:
+                  profile_photo_url ||
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&color=FFFFFF&background=C62828&bold=true`,
+              }}
               style={styles.profileImage}
             />
           </TouchableOpacity>
         </View>
 
-        {/* --- Tarjetas de Acciones Rápidas --- */}
+        {/* --- Accesos Rápidos --- */}
         <View style={styles.actionsContainer}>
           <Text style={styles.sectionTitle}>Accesos Rápidos</Text>
-          
-          {/* Tarjetas para todos los usuarios */}
+
           <ActionCard
             title="Mi Perfil"
             description="Edita tus datos y foto"
@@ -110,9 +113,7 @@ export default function HomeScreen() {
             color={COLORS.secondary}
             onPress={() => router.push('/(tabs)/profile')}
           />
-          
 
-          {/* Panel de Administrador */}
           {isAdmin && (
             <>
               <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Panel de Administrador</Text>
@@ -121,7 +122,7 @@ export default function HomeScreen() {
                 description="Visualiza a todos los usuarios"
                 icon="map-outline"
                 color={COLORS.admin}
-                onPress={() => router.push('/(tabs)/admin-map')}
+                onPress={() => router.push('/(tabs)/admin-map-simple')}
               />
               <ActionCard
                 title="Gestión de Usuarios"
@@ -147,7 +148,8 @@ export default function HomeScreen() {
             </>
           )}
         </View>
-        {/* --- Botón de Cerrar Sesión --- */}
+
+        {/* --- Cerrar Sesión --- */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={22} color={COLORS.primary} />
           <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
@@ -158,7 +160,7 @@ export default function HomeScreen() {
   );
 }
 
-// --- Hoja de Estilos Moderna ---
+// --- Estilos ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -171,8 +173,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   container: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
   },
   header: {
     flexDirection: 'row',
@@ -213,10 +214,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 15,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,

@@ -32,20 +32,36 @@ interface EvaluacionServicio {
   id: number;
   consecutivo: string;
   registro_cliente_id: number;
-  tipo_servicio: string;
+  
+  // Campos reales del backend
+  servicio_mantenimiento: boolean;
+  servicio_otro: boolean;
+  servicio_cual?: string;
+  
   cliente_zona: string;
   telefono: string;
   direccion: string;
   ciudad: string;
-  periodo_evaluar: string;
+  periodo_inicio?: string;
+  periodo_fin?: string;
   fecha_evaluacion: string;
-  evaluador: string;
+  nombre_evaluador: string;
+  cargo_evaluador?: string;
   supervisor_asignado?: string;
-  calificacion: string;
+  
+  // Calificaciones
+  calificacion_excelente?: number;
+  calificacion_muy_bueno?: number;
+  calificacion_bueno?: number;
+  calificacion_regular?: number;
+  calificacion_malo?: number;
+  
   observaciones?: string;
   firma_cliente_base64?: string;
+  nombre_firma?: string;
+  cedula_firma?: string;
+  fecha_firma?: string;
   estado: string;
-  fecha_creacion: string;
   created_at: string;
   updated_at: string;
   usuario?: {
@@ -60,6 +76,37 @@ export default function EvaluacionServicioDetalle() {
   const { user } = useAuth();
   const [evaluacion, setEvaluacion] = useState<EvaluacionServicio | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Función para obtener el tipo de servicio
+  const getTipoServicio = (evaluacion: EvaluacionServicio): string => {
+    if (evaluacion.servicio_mantenimiento) {
+      return 'MANTENIMIENTO';
+    }
+    if (evaluacion.servicio_otro) {
+      return evaluacion.servicio_cual ? evaluacion.servicio_cual.toUpperCase() : 'OTRO';
+    }
+    return 'NO ESPECIFICADO';
+  };
+
+  // Función para obtener la calificación como string
+  const getCalificacion = (evaluacion: EvaluacionServicio): string => {
+    if (evaluacion.calificacion_excelente) return 'EXCELENTE (5)';
+    if (evaluacion.calificacion_muy_bueno) return 'MUY BUENO (4)';
+    if (evaluacion.calificacion_bueno) return 'BUENO (3)';
+    if (evaluacion.calificacion_regular) return 'REGULAR (2)';
+    if (evaluacion.calificacion_malo) return 'MALO (1)';
+    return 'NO ESPECIFICADO';
+  };
+
+  // Función para obtener el tipo de calificación (para colores)
+  const getTipoCalificacion = (evaluacion: EvaluacionServicio): string => {
+    if (evaluacion.calificacion_excelente) return 'excelente';
+    if (evaluacion.calificacion_muy_bueno) return 'muy_bueno';
+    if (evaluacion.calificacion_bueno) return 'bueno';
+    if (evaluacion.calificacion_regular) return 'regular';
+    if (evaluacion.calificacion_malo) return 'malo';
+    return 'no_especificado';
+  };
 
   useEffect(() => {
     if (id && user?.token) {
@@ -184,7 +231,7 @@ export default function EvaluacionServicioDetalle() {
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Fecha de Creación:</Text>
             <Text style={styles.infoValue}>
-              {new Date(evaluacion.fecha_creacion).toLocaleString('es-CO')}
+              {new Date(evaluacion.created_at).toLocaleString('es-CO')}
             </Text>
           </View>
 
@@ -199,7 +246,7 @@ export default function EvaluacionServicioDetalle() {
         {/* Tipo de Servicio */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>TIPO DE SERVICIO</Text>
-          <Text style={styles.infoValue}>{evaluacion.tipo_servicio.toUpperCase()}</Text>
+          <Text style={styles.infoValue}>{getTipoServicio(evaluacion)}</Text>
         </View>
 
         {/* Datos del Cliente */}
@@ -233,7 +280,12 @@ export default function EvaluacionServicioDetalle() {
           
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Período Evaluado:</Text>
-            <Text style={styles.infoValue}>{evaluacion.periodo_evaluar}</Text>
+            <Text style={styles.infoValue}>
+              {evaluacion.periodo_inicio && evaluacion.periodo_fin 
+                ? `${evaluacion.periodo_inicio} - ${evaluacion.periodo_fin}`
+                : 'Ver observaciones para período evaluado'
+              }
+            </Text>
           </View>
 
           <View style={styles.infoRow}>
@@ -243,7 +295,7 @@ export default function EvaluacionServicioDetalle() {
 
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Evaluador:</Text>
-            <Text style={styles.infoValue}>{evaluacion.evaluador}</Text>
+            <Text style={styles.infoValue}>{evaluacion.nombre_evaluador}</Text>
           </View>
 
           {evaluacion.supervisor_asignado && (
@@ -260,11 +312,11 @@ export default function EvaluacionServicioDetalle() {
           <View
             style={[
               styles.calificacionBadge,
-              { backgroundColor: getCalificacionColor(evaluacion.calificacion) },
+              { backgroundColor: getCalificacionColor(getTipoCalificacion(evaluacion)) },
             ]}
           >
             <Text style={styles.calificacionText}>
-              {getCalificacionTexto(evaluacion.calificacion)}
+              {getCalificacion(evaluacion)}
             </Text>
           </View>
         </View>
@@ -282,12 +334,50 @@ export default function EvaluacionServicioDetalle() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>FIRMA DEL CLIENTE</Text>
             <View style={styles.firmaContainer}>
-              <SvgXml
-                xml={atob(evaluacion.firma_cliente_base64.split(',')[1])}
-                width="100%"
-                height={150}
-              />
+              {evaluacion.firma_cliente_base64.includes('svg+xml') ? (
+                <View style={styles.svgContainer}>
+                  <SvgXml
+                    xml={(() => {
+                      const svgContent = atob(evaluacion.firma_cliente_base64.split(',')[1]);
+                      console.log('🖋️ SVG Content preview:', svgContent.substring(0, 200) + '...');
+                      console.log('📏 SVG Content length:', svgContent.length);
+                      
+                      // Modificar el SVG para que sea más responsive y centrado
+                      let modifiedSvg = svgContent
+                        .replace(/width="[^"]*"/, '')
+                        .replace(/height="[^"]*"/, '')
+                        .replace('<svg', '<svg width="100%" height="100%" viewBox="0 0 350 200" preserveAspectRatio="xMidYMid meet"');
+                      
+                      // Si no tiene viewBox, agregarlo
+                      if (!modifiedSvg.includes('viewBox')) {
+                        modifiedSvg = modifiedSvg.replace('<svg', '<svg viewBox="0 0 350 200"');
+                      }
+                      
+                      return modifiedSvg;
+                    })()}
+                    style={{
+                      alignSelf: 'center',
+                    }}
+                  />
+                </View>
+              ) : (
+                <Text style={styles.infoValue}>Firma no disponible (formato no soportado)</Text>
+              )}
             </View>
+            {evaluacion.nombre_firma && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Firmado por:</Text>
+                <Text style={styles.infoValue}>{evaluacion.nombre_firma}</Text>
+              </View>
+            )}
+            {evaluacion.fecha_firma && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Fecha:</Text>
+                <Text style={styles.infoValue}>
+                  {new Date(evaluacion.fecha_firma).toLocaleString('es-CO')}
+                </Text>
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -401,9 +491,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 8,
-    padding: 10,
+    padding: 15,
     backgroundColor: COLORS.background,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  svgContainer: {
+    width: '90%',
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'white',
+    borderRadius: 4,
+    overflow: 'hidden',
   },
   loadingText: {
     marginTop: 10,

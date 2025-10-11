@@ -28,6 +28,8 @@ import { useAuth } from './_layout';
 import { subirFotoEvidencia, eliminarFotoEvidencia } from '../services/evidenciasService';
 import SimpleSignaturePad from '../components/SimpleSignaturePad';
 import { getSecureItem } from '../utils/secureStorage';
+import { useLocation } from '@/contexts/LocationContext';
+
 
 const COLORS = {
   primary: '#1E3A8A',
@@ -45,6 +47,7 @@ const COLORS = {
 };
 
 const API_BASE = 'https://operaciones.lavianda.com.co/api';
+  const { startTracking, startBackgroundTracking } = useLocation();
 
 // ✅ LISTADO SIMPLE DE ÁREAS (FUNCIONA)
 const AREAS_INSPECCION = [
@@ -553,6 +556,18 @@ export default function FormularioInspeccionSupervision() {
           ]
         );
       }
+
+       try {
+      console.log('🔐 Iniciando tracking de formulario...');
+      await startTracking(String(token), 'form_start');
+      console.log('✅ Punto FORM_START enviado');
+
+      const sessionId = `session_${Date.now()}`;
+      await startBackgroundTracking(String(token), sessionId);
+      console.log('🎯 Tracking en background iniciado');
+    } catch (trackingError) {
+      console.warn('⚠️ Error al iniciar tracking:', trackingError);
+    }
     } catch (error: any) {
       console.error('Error guardando formulario:', error);
       Alert.alert('Error', error.response?.data?.message || 'No se pudo guardar el formulario');

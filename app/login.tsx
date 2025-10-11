@@ -82,7 +82,7 @@ export default function LoginScreen() {
           console.log(`🔐 Iniciando tracking con token`);
           
           // ✅ Paso 1: Enviar punto de login
-          await startTracking(token, 'login');
+         await startTracking(token, 'login');
           console.log('✅ Punto de Login enviado');
           
           // ✅ Paso 2: Iniciar tracking en background REAL (producción)

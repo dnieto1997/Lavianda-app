@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useAuth } from './_layout';
-import SignatureScreen from 'react-native-signature-canvas';
+import { SimpleSignaturePad } from '../components/SimpleSignaturePad';
 
 const API_BASE = 'https://operaciones.lavianda.com.co/api';
 
@@ -56,15 +56,43 @@ export default function FormularioEvaluacionServicio() {
   const [showSignaturePad, setShowSignaturePad] = useState(false);
   const [firmaClienteBase64, setFirmaClienteBase64] = useState('');
   const signatureRef = useRef<any>(null);
+  const observacionesRef = useRef<TextInput>(null);
+
+  // Handler optimizado para observaciones
+  const handleObservacionesChange = useCallback((text: string) => {
+    setObservaciones(text);
+  }, []);
 
   const handleOK = (signature: string) => {
+    if (!signature || signature.trim() === '') {
+      Alert.alert('Error', 'No se pudo capturar la firma. Intente nuevamente.');
+      return;
+    }
+    
+    const sizeInBytes = signature.length;
+    const sizeInKB = sizeInBytes / 1024;
+    
+    console.log('📏 Formato de firma:', signature.includes('svg+xml') ? 'SVG' : 'PNG');
+    console.log('📏 Tamaño de la firma:', sizeInKB.toFixed(2), 'KB');
+    
+    // SVG es mucho más pequeño, aumentamos el límite
+    if (sizeInKB > 100) {
+      Alert.alert(
+        'Firma muy grande', 
+        `La firma (${sizeInKB.toFixed(0)}KB) es demasiado grande.\n\nPor favor dibuje una firma más simple.`,
+        [{ text: 'OK', onPress: () => handleClear() }]
+      );
+      return;
+    }
+    
+    // Si es aceptable, guardar
     setFirmaClienteBase64(signature);
     setShowSignaturePad(false);
-    Alert.alert('Éxito', 'Firma capturada correctamente');
+    Alert.alert('Éxito', `Firma capturada correctamente (${sizeInKB.toFixed(1)}KB)`);
   };
 
   const handleClear = () => {
-    signatureRef.current?.clearSignature();
+    signatureRef.current?.clear();
   };
 
   const validarFormulario = (): boolean => {
@@ -108,6 +136,17 @@ export default function FormularioEvaluacionServicio() {
       Alert.alert('Error', 'Por favor capture la firma del cliente');
       return false;
     }
+    
+    // Validar tamaño de la firma antes del envío (SVG debería ser mucho más pequeño)
+    const firmaSize = firmaClienteBase64.length;
+    const firmaSizeKB = firmaSize / 1024;
+    console.log('📏 Tamaño de firma a enviar:', firmaSizeKB.toFixed(2), 'KB');
+    
+    if (firmaSizeKB > 100) {
+      Alert.alert('Error', 'La firma es demasiado grande. Por favor capture una firma más simple.');
+      return false;
+    }
+    
     return true;
   };
 
@@ -124,25 +163,61 @@ export default function FormularioEvaluacionServicio() {
       const fechaActual = `${year}-${month}-${day}`;
       
       const data = {
-        registro_cliente_id: registroId,
-        tipo_servicio: tipoServicio === 'otro' ? otroServicio : tipoServicio,
-        cliente_zona: clienteZona,
-        telefono,
-        direccion,
-        ciudad,
-        periodo_evaluar: periodoEvaluar,
-        fecha_evaluacion: fechaActual, // Fecha automática
-        evaluador,
-        supervisor_asignado: supervisorAsignado,
-        calificacion,
-        observaciones,
+        registro_cliente_id: parseInt(registroId as string),
+        fecha_evaluacion: fechaActual,
+        
+        // Datos del cliente
+        cliente_zona: clienteZona.trim(),
+        direccion: direccion.trim(),
+        telefono: telefono.trim(),
+        ciudad: ciudad.trim(),
+        
+        // Período - enviamos null para fechas y el texto a observaciones
+        periodo_inicio: null,
+        periodo_fin: null,
+        
+        // Evaluador
+        nombre_evaluador: evaluador.trim(),
+        cargo_evaluador: 'Cliente', // Valor por defecto
+        
+        // Supervisor
+        supervisor_asignado: supervisorAsignado.trim() || null,
+        
+        // Tipo de servicio
+        servicio_mantenimiento: tipoServicio === 'mantenimiento',
+        servicio_otro: tipoServicio === 'otro',
+        servicio_cual: tipoServicio === 'otro' ? otroServicio.trim() : null,
+        
+        // Calificación (enviar número solo para la seleccionada)
+        calificacion_excelente: calificacion === 'excelente' ? 5 : null,
+        calificacion_muy_bueno: calificacion === 'muy_bueno' ? 4 : null,
+        calificacion_bueno: calificacion === 'bueno' ? 3 : null,
+        calificacion_regular: calificacion === 'regular' ? 2 : null,
+        calificacion_malo: calificacion === 'malo' ? 1 : null,
+        
+        // Observaciones y firma (incluimos el período en observaciones)
+        observaciones: `Período evaluado: ${periodoEvaluar.trim()}${observaciones.trim() ? '\n\nObservaciones adicionales:\n' + observaciones.trim() : ''}`,
         firma_cliente_base64: firmaClienteBase64,
+        nombre_firma: clienteZona.trim(), // Usamos el nombre del cliente
+        cedula_firma: null, // Campo opcional
+        fecha_firma: fechaActual,
+        
+        // Coordenadas (opcionales)
+        latitud: null,
+        longitud: null,
       };
 
       console.log('🔍 Enviando evaluación de servicio:');
       console.log('📋 registroId:', registroId);
       console.log('📋 fechaActual:', fechaActual);
-      console.log('📋 Data completa:', JSON.stringify(data, null, 2));
+      console.log('📋 Data a enviar:', {
+        registro_cliente_id: data.registro_cliente_id,
+        fecha_evaluacion: data.fecha_evaluacion,
+        cliente_zona: data.cliente_zona,
+        tipo_servicio: `${data.servicio_mantenimiento ? 'mantenimiento' : ''}${data.servicio_otro ? 'otro' : ''}`,
+        calificacion_seleccionada: calificacion,
+        firma_size_kb: (firmaClienteBase64.length / 1024).toFixed(2)
+      });
 
       const response = await axios.post(
         `${API_BASE}/formularios/evaluacion-servicio`,
@@ -166,7 +241,7 @@ export default function FormularioEvaluacionServicio() {
             onPress: () => {
               router.replace({
                 pathname: '/evaluacion-servicio-detalle',
-                params: { id: response.data.evaluacion.id },
+                params: { id: response.data.data.id },
               });
             },
           },
@@ -179,20 +254,23 @@ export default function FormularioEvaluacionServicio() {
         ]
       );
     } catch (error: any) {
-      console.error('❌ Error al crear evaluación:', error);
-      console.error('❌ Detalles del error:', error.response?.data);
+      console.error('❌ Error al crear evaluación:', error.message);
       console.error('❌ Status del error:', error.response?.status);
-      console.error('❌ Error completo:', JSON.stringify(error.response, null, 2));
+      console.error('❌ Detalles del error:', error.response?.data);
       
       let errorMessage = 'No se pudo crear la evaluación del servicio';
       
-      if (error.response?.data?.errors) {
+      if (error.response?.status === 422 && error.response?.data?.errors) {
         // Si hay errores de validación específicos
         const errors = error.response.data.errors;
         const errorList = Object.keys(errors).map(key => `${key}: ${errors[key][0]}`).join('\n');
         errorMessage = `Errores de validación:\n${errorList}`;
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Error interno del servidor. Verifique los datos e intente nuevamente.';
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
       }
       
       Alert.alert('Error', errorMessage);
@@ -213,27 +291,16 @@ export default function FormularioEvaluacionServicio() {
             <Ionicons name="close" size={24} color={COLORS.textPrimary} />
           </TouchableOpacity>
         </View>
-        <SignatureScreen
-          ref={signatureRef}
-          onOK={handleOK}
-          onClear={handleClear}
-          descriptionText="Firme aquí"
-          clearText="Limpiar"
-          confirmText="Confirmar"
-          webStyle={`
-            .m-signature-pad {
-              box-shadow: none;
-              border: 2px solid ${COLORS.border};
-              border-radius: 8px;
-            }
-            .m-signature-pad--body {
-              border: none;
-            }
-            .m-signature-pad--footer {
-              display: none;
-            }
-          `}
-        />
+        
+        <View style={styles.signaturePadContainer}>
+          <SimpleSignaturePad
+            ref={signatureRef}
+            height={300}
+            strokeColor="#000"
+            strokeWidth={3}
+          />
+        </View>
+        
         <View style={styles.signatureActions}>
           <TouchableOpacity
             style={[styles.button, styles.buttonSecondary]}
@@ -243,7 +310,17 @@ export default function FormularioEvaluacionServicio() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.button, styles.buttonPrimary]}
-            onPress={() => signatureRef.current?.readSignature()}
+            onPress={() => {
+              console.log('🖊️ Usuario confirmó la firma');
+              if (signatureRef.current?.isEmpty()) {
+                Alert.alert('Error', 'Por favor firme antes de continuar');
+                return;
+              }
+              const signatureData = signatureRef.current?.toDataURL();
+              if (signatureData) {
+                handleOK(signatureData);
+              }
+            }}
           >
             <Text style={styles.buttonText}>Confirmar Firma</Text>
           </TouchableOpacity>
@@ -424,13 +501,24 @@ export default function FormularioEvaluacionServicio() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>OBSERVACIONES</Text>
           <TextInput
+            ref={observacionesRef}
+            key="observaciones-field"
             style={[styles.input, styles.textArea]}
             placeholder="Observaciones adicionales..."
             value={observaciones}
-            onChangeText={setObservaciones}
-            multiline
+            onChangeText={handleObservacionesChange}
+            multiline={true}
             numberOfLines={4}
             textAlignVertical="top"
+            blurOnSubmit={false}
+            scrollEnabled={true}
+            autoCorrect={false}
+            keyboardType="default"
+            returnKeyType="default"
+            enablesReturnKeyAutomatically={false}
+            autoComplete="off"
+            autoCapitalize="sentences"
+            clearButtonMode="never"
           />
         </View>
 
@@ -689,6 +777,14 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 5,
+  },
+  signaturePadContainer: {
+    flex: 1,
+    margin: 15,
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: COLORS.border,
   },
   signatureActions: {
     flexDirection: 'row',

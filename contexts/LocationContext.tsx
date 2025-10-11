@@ -1,11 +1,22 @@
-// --- START OF FILE contexts/LocationContext.tsx (VERSIÓN PRODUCCIÓN) ---
+// --- START OF FILE contexts/LocationContext.tsx (VERSIÓN MULTIPLATAFORMA) ---
 
 import React, { createContext, useContext, useCallback, useEffect, ReactNode } from 'react';
-import * as Location from 'expo-location';
-import * as TaskManager from 'expo-task-manager';
 import axios from 'axios';
 import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Importaciones condicionales para móvil
+let Location: any = null;
+let TaskManager: any = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    Location = require('expo-location');
+    TaskManager = require('expo-task-manager');
+  } catch (error) {
+    console.warn('⚠️ Expo Location/TaskManager no disponible');
+  }
+}
 
 // --- CONFIGURACIÓN ---
 const API_BASE = 'https://operaciones.lavianda.com.co/api';
@@ -13,7 +24,7 @@ const LOCATION_TASK_NAME = 'background-location-task';
 
 // --- DEFINICIÓN DE TIPOS ---
 interface LocationContextType {
-  startTracking: (token: string, type: 'login' | 'logout') => Promise<void>;
+  startTracking: (token: string, type: 'login' | 'logout'| 'form_start') => Promise<void>;
   startBackgroundTracking: (token: string, sessionId: string) => Promise<void>;
   stopBackgroundTracking: () => Promise<void>;
   isTrackingActive: () => Promise<boolean>;
@@ -26,62 +37,64 @@ const STORAGE_KEYS = {
   IS_TRACKING: 'is_tracking_active',
 };
 
-// --- BACKGROUND TASK DEFINITION ---
-TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
-  if (error) {
-    console.error('❌ [BackgroundTask] Error:', error);
-    return;
-  }
-
-  if (data) {
-    const { locations } = data as { locations: Location.LocationObject[] };
-    
-    try {
-      // Obtener token y session_id desde AsyncStorage
-      const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
-      const sessionId = await AsyncStorage.getItem(STORAGE_KEYS.SESSION_ID);
-      
-      if (!token || !sessionId) {
-        console.warn('⚠️ [BackgroundTask] No hay token o session_id');
-        return;
-      }
-
-      // Procesar cada ubicación
-      for (const location of locations) {
-        const timestampForMySQL = new Date(location.timestamp)
-          .toISOString()
-          .slice(0, 19)
-          .replace('T', ' ');
-
-        const locationData = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          accuracy: location.coords.accuracy,
-          speed: location.coords.speed || 0,
-          heading: location.coords.heading || 0,
-          altitude: location.coords.altitude || 0,
-          timestamp: timestampForMySQL,
-          type: 'tracking',
-          session_id: sessionId,
-        };
-
-        // Enviar al servidor
-        await axios.post(`${API_BASE}/locations`, locationData, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-          timeout: 10000,
-        });
-
-        console.log('📍 [BackgroundTask] Ubicación enviada en background');
-      }
-    } catch (error) {
-      console.error('❌ [BackgroundTask] Error enviando ubicación:', error);
+// --- BACKGROUND TASK DEFINITION (Solo móvil) ---
+if (Platform.OS !== 'web' && TaskManager) {
+  TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: { data: any; error: any }) => {
+    if (error) {
+      console.error('❌ [BackgroundTask] Error:', error);
+      return;
     }
-  }
-});
+
+    if (data) {
+      const { locations } = data as { locations: any[] };
+      
+      try {
+        // Obtener token y session_id desde AsyncStorage
+        const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+        const sessionId = await AsyncStorage.getItem(STORAGE_KEYS.SESSION_ID);
+        
+        if (!token || !sessionId) {
+          console.warn('⚠️ [BackgroundTask] No hay token o session_id');
+          return;
+        }
+
+        // Procesar cada ubicación
+        for (const location of locations) {
+          const timestampForMySQL = new Date(location.timestamp)
+            .toISOString()
+            .slice(0, 19)
+            .replace('T', ' ');
+
+          const locationData = {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            accuracy: location.coords.accuracy,
+            speed: location.coords.speed || 0,
+            heading: location.coords.heading || 0,
+            altitude: location.coords.altitude || 0,
+            timestamp: timestampForMySQL,
+            type: 'tracking',
+            session_id: sessionId,
+          };
+
+          // Enviar al servidor
+          await axios.post(`${API_BASE}/locations`, locationData, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          });
+
+          console.log('📍 [BackgroundTask] Ubicación enviada en background');
+        }
+      } catch (error) {
+        console.error('❌ [BackgroundTask] Error enviando ubicación:', error);
+      }
+    }
+  });
+}
 
 // --- CREACIÓN DEL CONTEXTO ---
 const LocationContext = createContext<LocationContextType | null>(null);
@@ -116,6 +129,7 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
       });
 
       console.log('✅ [LocationContext] Ubicación enviada exitosamente');
+      console.log("@@@@@@@@@@@@@qqq",response.data)
       return response.data;
     } catch (error) {
       console.error('❌ [LocationContext] Error al enviar ubicación:', error);
@@ -123,51 +137,109 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  // Enviar punto único (login/logout)
-  const startTracking = useCallback(async (token: string, type: 'login' | 'logout') => {
+  // Enviar punto único (login/logout) - Multiplataforma
+  const startTracking = useCallback(async (token: string, type: 'login' | 'logout'| 'createform') => {
     console.log(`🗺️ [LocationContext] Enviando punto de tipo: ${type}`);
     
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        throw new Error('El permiso para acceder a la ubicación fue denegado.');
+      let locationData: any;
+
+      if (Platform.OS === 'web') {
+        // Usar Geolocation API en web
+        if (!navigator.geolocation) {
+          console.warn('⚠️ Geolocation no disponible en este navegador');
+          // Enviar ubicación mock para web
+          locationData = {
+            latitude: 0,
+            longitude: 0,
+            accuracy: 0,
+            speed: 0,
+            heading: 0,
+            altitude: 0,
+            timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            type: type,
+            session_id: `${type}_${Date.now()}`
+          };
+        } else {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 60000
+            });
+          });
+
+          locationData = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            speed: position.coords.speed || 0,
+            heading: position.coords.heading || 0,
+            altitude: position.coords.altitude || 0,
+            timestamp: new Date(position.timestamp).toISOString().slice(0, 19).replace('T', ' '),
+            type: type,
+            session_id: `${type}_${Date.now()}`
+          };
+        }
+      } else {
+        // Usar expo-location en móvil
+        if (!Location) {
+          throw new Error('expo-location no disponible');
+        }
+
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          throw new Error('El permiso para acceder a la ubicación fue denegado.');
+        }
+
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        
+        locationData = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          accuracy: location.coords.accuracy,
+          speed: location.coords.speed || 0,
+          heading: location.coords.heading || 0,
+          altitude: location.coords.altitude || 0,
+          timestamp: new Date(location.timestamp).toISOString().slice(0, 19).replace('T', ' '),
+          type: type,
+          session_id: `${type}_${Date.now()}`
+        };
       }
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
       
-      const timestampForMySQL = new Date(location.timestamp)
-        .toISOString()
-        .slice(0, 19)
-        .replace('T', ' ');
-
-      const locationData = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy,
-        speed: location.coords.speed || 0,
-        heading: location.coords.heading || 0,
-        altitude: location.coords.altitude || 0,
-        timestamp: timestampForMySQL,
-        type: type,
-        session_id: `${type}_${Date.now()}`
-      };
-      
-      await sendLocationToServer(token, locationData);
+        const  res = await sendLocationToServer(token, locationData);
+        console.log("@@@@@@@@@@@@@@@@@q",res)
+   
+  
 
     } catch (error: any) {
       console.error(`❌ [LocationContext] Error enviando punto de '${type}':`, error.message);
-      Alert.alert(
-        'Error de Ubicación',
-        `No se pudo registrar la ubicación de ${type}. Error: ${error.message}`
-      );
-      throw error; 
+      // En web, no mostrar alert que puede bloquear
+      if (Platform.OS !== 'web') {
+        Alert.alert(
+          'Error de Ubicación',
+          `No se pudo registrar la ubicación de ${type}. Error: ${error.message}`
+        );
+      }
+      // No lanzar error para que el login no falle
+      console.warn(`⚠️ Continuando sin tracking para ${type}`);
     }
   }, [sendLocationToServer]);
 
-  // Iniciar tracking en background (PRODUCCIÓN)
+  // Iniciar tracking en background (Solo móvil)
   const startBackgroundTracking = useCallback(async (token: string, sessionId: string) => {
+    if (Platform.OS === 'web') {
+      console.log('⚠️ [LocationContext] Background tracking no disponible en web');
+      return;
+    }
+
+    if (!Location || !TaskManager) {
+      console.warn('⚠️ expo-location o expo-task-manager no disponible');
+      return;
+    }
+
     console.log('🎯 [LocationContext] Iniciando tracking en background REAL...');
     
     try {
@@ -213,16 +285,28 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
 
     } catch (error: any) {
       console.error('❌ [LocationContext] Error iniciando tracking en background:', error);
-      Alert.alert(
-        'Error de Tracking',
-        `No se pudo iniciar el tracking: ${error.message}`
-      );
+      if (Platform.OS !== 'web') {
+        Alert.alert(
+          'Error de Tracking',
+          `No se pudo iniciar el tracking: ${error.message}`
+        );
+      }
       throw error;
     }
   }, []);
 
   // Detener tracking en background
   const stopBackgroundTracking = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      console.log('⚠️ [LocationContext] Background tracking no aplica en web');
+      return;
+    }
+
+    if (!Location || !TaskManager) {
+      console.warn('⚠️ expo-location o expo-task-manager no disponible');
+      return;
+    }
+
     console.log('🛑 [LocationContext] Deteniendo tracking en background...');
     
     try {
