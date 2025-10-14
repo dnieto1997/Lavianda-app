@@ -47,7 +47,7 @@ const COLORS = {
 };
 
 const API_BASE = 'https://operaciones.lavianda.com.co/api';
-  const { startTracking, startBackgroundTracking } = useLocation();
+ 
 
 // ✅ LISTADO SIMPLE DE ÁREAS (FUNCIONA)
 const AREAS_INSPECCION = [
@@ -143,6 +143,7 @@ export default function FormularioInspeccionSupervision() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const signatureRef = useRef<any>(null);
+   const { startTracking, startBackgroundTracking } = useLocation();
   
   const [saving, setSaving] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);

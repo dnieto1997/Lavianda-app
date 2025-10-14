@@ -263,6 +263,7 @@ function RootLayoutWithLocation() {
           <Stack.Screen name="formulario-acta-inicio" options={{ headerShown: true, title: "Formulario Acta de Inicio" }} />
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="reset-password" options={{ headerShown: true, title: "Restablecer Contraseña" }} />
+          
       </Stack>
     </AuthContext.Provider>
   )

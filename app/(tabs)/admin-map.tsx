@@ -69,6 +69,8 @@ export default function AdminMapRedirect() {
   const [showDateModal, setShowDateModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const mapRef = useRef<any>(null);
+  const [calendarUserId, setCalendarUserId] = useState<number | null>(null);
+
 
   // === Colores de markers ===
   const getUserMarkerColor = (user: any) => {
@@ -135,6 +137,43 @@ export default function AdminMapRedirect() {
     console.error('Error al obtener rutas o formularios:', error);
   }
 };
+
+// 👉 Cuando seleccionas un usuario (centrar mapa en su posición)
+const handleUserSelect = (userId: number) => {
+  setSelectedUser(userId);
+  setSelectedDate(new Date()); // fecha actual
+  setCalendarUserId(userId);
+
+  const user = userLocations.find(u => u.id === userId);
+  if (user && mapRef.current) {
+    if (Platform.OS === 'web') {
+      mapRef.current.panTo({
+        lat: user.latitude,
+        lng: user.longitude,
+      });
+      mapRef.current.setZoom(16);
+    } else {
+      mapRef.current.animateToRegion(
+        {
+          latitude: user.latitude,
+          longitude: user.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        1000
+      );
+    }
+  }
+};
+
+
+// 👉 Cuando presionas el icono de calendario
+const openCalendarForUser = (userId: number) => {
+  setSelectedUser(userId);
+  setShowDateModal(true);
+};
+
+
 
   // === Renderizar mapa ===
   const renderMap = () => {
@@ -442,21 +481,37 @@ export default function AdminMapRedirect() {
           <Text style={styles.infoPanelTitle}>
             Usuarios en línea ({userLocations.filter(u => u.isOnline).length})
           </Text>
-          {userLocations.map(user => (
-            <TouchableOpacity
-              key={user.id}
-              style={[
-                styles.userItem,
-                selectedUser === user.id && styles.userItemSelected,
-              ]}
-              onPress={() => openDatePicker(user.id)}
-            >
-              <Text style={styles.userName}>{user.name}</Text>
-              <Text style={styles.userStatus}>
-                {user.isOnline ? 'Online' : 'Offline'}
-              </Text>
-            </TouchableOpacity>
-          ))}
+         {userLocations.map(user => (
+  <View
+    key={user.id}
+    style={[
+      styles.userItem,
+      selectedUser === user.id && styles.userItemSelected,
+    ]}
+  >
+    {/* Nombre del usuario */}
+    <TouchableOpacity
+      style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+      onPress={() => handleUserSelect(user.id)}
+    >
+      <Text style={styles.userName}>{user.name}</Text>
+      {calendarUserId === user.id && (
+        <Ionicons
+          name="calendar-outline"
+          size={18}
+          color="#2196F3"
+          style={{ marginLeft: 6 }}
+          onPress={() => openCalendarForUser(user.id)}
+        />
+      )}
+    </TouchableOpacity>
+
+    <Text style={styles.userStatus}>
+      {user.isOnline ? 'Online' : 'Offline'}
+    </Text>
+  </View>
+))}
+
         </ScrollView>
       </View>
     </SafeAreaView>
