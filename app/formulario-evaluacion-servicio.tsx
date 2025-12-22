@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,11 +15,12 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useAuth } from './_layout';
 import { SimpleSignaturePad } from '../components/SimpleSignaturePad';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const API_BASE = 'https://operaciones.lavianda.com.co/api';
 
 const COLORS = {
-  primary: '#2196F3',
+  primary: '#1E3A8A',
   success: '#4CAF50',
   warning: '#FF9800',
   error: '#F44336',
@@ -34,7 +35,7 @@ type CalificacionType = 'excelente' | 'muy_bueno' | 'bueno' | 'regular' | 'malo'
 type TipoServicioType = 'mantenimiento' | 'otro' | null;
 
 export default function FormularioEvaluacionServicio() {
-  const { registroId } = useLocalSearchParams();
+  const { registroId,empresaId,empresaNombre, ciudad: CiudadParamas } = useLocalSearchParams();
   const { user } = useAuth();
 
   // Estados del formulario
@@ -63,6 +64,13 @@ export default function FormularioEvaluacionServicio() {
     setObservaciones(text);
   }, []);
 
+
+  
+  useEffect(() => {
+  if (empresaNombre ) {
+    setClienteZona(empresaNombre as string);
+  }
+}, [empresaNombre]);
   const handleOK = (signature: string) => {
     if (!signature || signature.trim() === '') {
       Alert.alert('Error', 'No se pudo capturar la firma. Intente nuevamente.');
@@ -279,19 +287,22 @@ export default function FormularioEvaluacionServicio() {
     }
   };
 
-  if (showSignaturePad) {
-    return (
+if (showSignaturePad) {
+  return (
+    <SafeAreaView style={styles.safeArea}>
       <View style={styles.signatureContainer}>
+        {/* Header con botón cerrar */}
         <View style={styles.signatureHeader}>
           <Text style={styles.signatureTitle}>Firma del Cliente</Text>
           <TouchableOpacity
             onPress={() => setShowSignaturePad(false)}
             style={styles.closeButton}
           >
-            <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+            <Ionicons name="close" size={26} color={COLORS.textPrimary} />
           </TouchableOpacity>
         </View>
-        
+
+        {/* Pad de firma */}
         <View style={styles.signaturePadContainer}>
           <SimpleSignaturePad
             ref={signatureRef}
@@ -300,18 +311,14 @@ export default function FormularioEvaluacionServicio() {
             strokeWidth={3}
           />
         </View>
-        
+
+        {/* Botones de acción */}
         <View style={styles.signatureActions}>
-          <TouchableOpacity
-            style={[styles.button, styles.buttonSecondary]}
-            onPress={handleClear}
-          >
-            <Text style={styles.buttonSecondaryText}>Limpiar</Text>
-          </TouchableOpacity>
+   
+
           <TouchableOpacity
             style={[styles.button, styles.buttonPrimary]}
             onPress={() => {
-              console.log('🖊️ Usuario confirmó la firma');
               if (signatureRef.current?.isEmpty()) {
                 Alert.alert('Error', 'Por favor firme antes de continuar');
                 return;
@@ -326,8 +333,9 @@ export default function FormularioEvaluacionServicio() {
           </TouchableOpacity>
         </View>
       </View>
-    );
-  }
+    </SafeAreaView>
+  );
+}
 
   return (
     <View style={styles.container}>
@@ -412,11 +420,11 @@ export default function FormularioEvaluacionServicio() {
 
           <Text style={styles.label}>Ciudad *</Text>
           <TextInput
-            style={styles.input}
-            placeholder="Ciudad"
-            value={ciudad}
-            onChangeText={setCiudad}
-          />
+  style={styles.input}
+  placeholder="Ciudad"
+  value={CiudadParamas as string ? CiudadParamas as string : ciudad}
+  onChangeText={setCiudad}
+/>
         </View>
 
         {/* Datos de la Evaluación */}
@@ -571,6 +579,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+   safeArea: {
+    flex: 1,
+    backgroundColor: '#fff', // 👈 importante para notch en iPhone
   },
   header: {
     flexDirection: 'row',

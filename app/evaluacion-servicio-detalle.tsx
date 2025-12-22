@@ -17,7 +17,7 @@ import { SvgXml } from 'react-native-svg';
 const API_BASE = 'https://operaciones.lavianda.com.co/api';
 
 const COLORS = {
-  primary: '#2196F3',
+  primary: '#1E3A8A',
   success: '#4CAF50',
   warning: '#FF9800',
   error: '#F44336',

@@ -26,6 +26,7 @@ import { useAuth } from './_layout';
 import { subirFotoEvidencia, eliminarFotoEvidencia, obtenerUrlFoto } from '../services/evidenciasService';
 import SimpleSignaturePad from '../components/SimpleSignaturePad';
 import { useLocation } from '@/contexts/LocationContext';
+import Svg, {  SvgXml } from 'react-native-svg';
 
 const COLORS = {
   primary: '#1E3A8A',        // Azul corporativo más elegante
@@ -901,10 +902,7 @@ export default function FormularioActaInicio() {
           text: 'Tomar foto',
           onPress: () => tomarFoto(area)
         },
-        {
-          text: 'Seleccionar de galería',
-          onPress: () => seleccionarFotoGaleria(area)
-        },
+
         {
           text: 'Cancelar',
           style: 'cancel'
@@ -1033,7 +1031,7 @@ export default function FormularioActaInicio() {
       const dataToSend = {
         ...formData,
         registro_cliente_id: params?.registroId || null,
-        firma: signatureData || firmaBase64,
+        firma_responsable: signatureData || firmaBase64,
       };
 
       console.log('📋 Datos completos a enviar:', JSON.stringify(dataToSend, null, 2));
@@ -1079,7 +1077,7 @@ export default function FormularioActaInicio() {
           console.log(`🔐 Iniciando tracking con token`);
           
           // ✅ Paso 1: Enviar punto de login
-         await startTracking(token, 'form_start');
+         await startTracking(token, 'Acta_de_Inicio');
           console.log('✅ Punto de FORM enviado');
           
           // ✅ Paso 2: Iniciar tracking en background REAL (producción)
@@ -1106,8 +1104,14 @@ export default function FormularioActaInicio() {
         [{ 
           text: 'OK', 
           onPress: () => {
-            console.log('👈 Regresando a pantalla anterior...');
-            router.back();
+           
+                 router.push({
+                pathname: '/registro-detalle',
+                params: {
+                  registroId: params.registroId,
+                 
+                },
+              });
           }
         }]
       );
@@ -1196,7 +1200,7 @@ export default function FormularioActaInicio() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>NIT / Cédula</Text>
+            <Text style={styles.label}>NIT / Cédula *</Text>
             <TextInput
               style={styles.input}
               value={formData.nit_cedula}
@@ -1207,7 +1211,7 @@ export default function FormularioActaInicio() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Dirección</Text>
+            <Text style={styles.label}>Dirección *</Text>
             <TextInput
               style={styles.input}
               value={formData.direccion}
@@ -1218,7 +1222,7 @@ export default function FormularioActaInicio() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Persona Encargada</Text>
+            <Text style={styles.label}>Persona Encargada *</Text>
             <TextInput
               style={styles.input}
               value={formData.persona_encargada}
@@ -1230,7 +1234,7 @@ export default function FormularioActaInicio() {
 
           <View style={styles.row}>
             <View style={styles.halfInput}>
-              <Text style={styles.label}>Correo</Text>
+              <Text style={styles.label}>Correo *</Text>
               <TextInput
                 style={styles.input}
                 value={formData.correo}
@@ -1241,7 +1245,7 @@ export default function FormularioActaInicio() {
               />
             </View>
             <View style={styles.halfInput}>
-              <Text style={styles.label}>Teléfono</Text>
+              <Text style={styles.label}>Teléfono *</Text>
               <TextInput
                 style={styles.input}
                 value={formData.telefono}
@@ -1444,44 +1448,74 @@ export default function FormularioActaInicio() {
         </View>
 
         {/* Sección de Firma (visible si existe firma guardada o recién capturada) */}
-        {(formData.firma_responsable || firmaBase64) && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>✍️ Firma Digital</Text>
-            <View style={styles.firmaPreviewContainer}>
-              <Image
-                source={{ uri: formData.firma_responsable || firmaBase64 }}
-                style={styles.firmaPreview}
-                resizeMode="contain"
-              />
-              <View style={styles.firmaInfoContainer}>
-                {(formData.nombre_firmante || user?.name) && (
-                  <Text style={styles.firmaInfo}>
-                    <Text style={styles.firmaInfoLabel}>Firmante: </Text>
-                    {formData.nombre_firmante || user?.name}
-                  </Text>
-                )}
-                {(formData.cedula_firmante || user?.cedula) && (
-                  <Text style={styles.firmaInfo}>
-                    <Text style={styles.firmaInfoLabel}>Cédula: </Text>
-                    {formData.cedula_firmante || user?.cedula}
-                  </Text>
-                )}
-                {formData.created_at && (
-                  <Text style={styles.firmaInfo}>
-                    <Text style={styles.firmaInfoLabel}>Fecha de firma: </Text>
-                    {new Date(formData.created_at).toLocaleDateString('es-CO', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </Text>
-                )}
-              </View>
-            </View>
+       {(formData.firma_responsable || firmaBase64) && (
+  <View style={styles.section}>
+    <Text style={styles.sectionTitle}>✍️ Firma Digital</Text>
+
+    <View style={styles.firmaPreviewContainer}>
+      {(() => {
+        const data = formData.firma_responsable || firmaBase64;
+        const base64 = data.split(",")[1];
+
+        // ✅ Decodificar base64 a SVG string
+        let decodedSvg = decodeURIComponent(escape(atob(base64)));
+
+        // ✅ Asegurar viewBox correcto y más alto para que no recorte la firma
+        if (!decodedSvg.includes("viewBox")) {
+          decodedSvg = decodedSvg.replace("<svg", `<svg viewBox="0 0 344 300"`); // 👈 más alto
+        }
+
+        // ✅ Mover la firma hacia arriba dentro del SVG para quitar espacio vacío superior
+        decodedSvg = decodedSvg.replace(
+          "<path",
+          `<path transform="translate(0, -60)"` // 👈 sube la firma 60px
+        );
+
+        return (
+          <View style={styles.svgWrapper}>
+            <SvgXml
+              xml={decodedSvg}
+              width="100%"  // 👈 ocupa todo el ancho
+              height={220}  // 👈 firma grande y sin recorte
+              preserveAspectRatio="xMidYMid meet"
+            />
           </View>
+        );
+      })()}
+
+      {/* INFO DEL FIRMANTE */}
+      <View style={styles.firmaInfoContainer}>
+        {(formData.nombre_firmante || user?.name) && (
+          <Text style={styles.firmaInfo}>
+            <Text style={styles.firmaInfoLabel}>Firmante: </Text>
+            {formData.nombre_firmante || user?.name}
+          </Text>
         )}
+
+        {(formData.cedula_firmante || user?.cedula) && (
+          <Text style={styles.firmaInfo}>
+            <Text style={styles.firmaInfoLabel}>Cédula: </Text>
+            {formData.cedula_firmante || user?.cedula}
+          </Text>
+        )}
+
+        {formData.created_at && (
+          <Text style={styles.firmaInfo}>
+            <Text style={styles.firmaInfoLabel}>Fecha de firma: </Text>
+            {new Date(formData.created_at).toLocaleDateString("es-CO", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        )}
+      </View>
+    </View>
+  </View>
+)}
+
 
         {/* Botones de acción */}
         {esVisualizacion ? (
@@ -2080,18 +2114,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   // Estilos para vista previa de firma
-  firmaPreviewContainer: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
+
   firmaPreview: {
     width: '100%',
     height: 200,
@@ -2101,9 +2124,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  firmaInfoContainer: {
-    gap: 6,
-  },
   firmaInfo: {
     fontSize: 14,
     color: COLORS.textSecondary,
@@ -2112,4 +2132,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
   },
+  firmaPreviewContainer: {
+  backgroundColor: "#fff",
+  padding: 5,
+  borderRadius: 8,
+  width: "100%",
+  alignItems: "center",
+  justifyContent: "flex-start",
+},
+
+svgWrapper: {
+  width: "100%",
+  height: 230,  // 👈 suficiente espacio para firma grande
+  justifyContent: "flex-start",
+  alignItems: "center",
+  overflow: "visible",
+},
+
+firmaInfoContainer: {
+
+  alignItems: "center",
+},
+
 });

@@ -4,8 +4,11 @@ import {
   StyleSheet,
   PanResponder,
   Dimensions,
+  TouchableOpacity,
+  Text,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { EvilIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -31,7 +34,6 @@ export const SimpleSignaturePad = React.forwardRef<any, SimpleSignaturePadProps>
     const [paths, setPaths] = useState<PathData[]>([]);
     const currentPath = useRef<Point[]>([]);
 
-    // Exponer métodos via ref
     React.useImperativeHandle(ref, () => ({
       clear: () => {
         setPaths([]);
@@ -41,7 +43,6 @@ export const SimpleSignaturePad = React.forwardRef<any, SimpleSignaturePadProps>
       getPaths: () => paths,
       isEmpty: () => paths.length === 0,
       toDataURL: () => {
-        // Convertir paths a SVG string base64
         const svgPaths = paths.map(p => p.pathString).join(' ');
         const svg = `<svg width="${width - 40}" height="${height}" xmlns="http://www.w3.org/2000/svg">
           <path d="${svgPaths}" stroke="${strokeColor}" strokeWidth="${strokeWidth}" fill="none" />
@@ -52,7 +53,6 @@ export const SimpleSignaturePad = React.forwardRef<any, SimpleSignaturePadProps>
 
     const pointsToSvgPath = (points: Point[]): string => {
       if (points.length === 0) return '';
-      
       let path = `M ${points[0].x} ${points[0].y}`;
       for (let i = 1; i < points.length; i++) {
         path += ` L ${points[i].x} ${points[i].y}`;
@@ -66,10 +66,7 @@ export const SimpleSignaturePad = React.forwardRef<any, SimpleSignaturePadProps>
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (evt) => {
           const { locationX, locationY } = evt.nativeEvent;
-          // Iniciar un nuevo trazo
           currentPath.current = [{ x: locationX, y: locationY }];
-          
-          // Agregar el punto inicial como un nuevo path temporal
           const newPath: PathData = {
             points: [{ x: locationX, y: locationY }],
             pathString: pointsToSvgPath([{ x: locationX, y: locationY }]),
@@ -78,25 +75,20 @@ export const SimpleSignaturePad = React.forwardRef<any, SimpleSignaturePadProps>
         },
         onPanResponderMove: (evt) => {
           const { locationX, locationY } = evt.nativeEvent;
-          // Agregar punto al trazo actual
           currentPath.current.push({ x: locationX, y: locationY });
-          
-          // Actualizar el último path (el trazo actual)
           const updatedPath: PathData = {
             points: [...currentPath.current],
             pathString: pointsToSvgPath(currentPath.current),
           };
-          
-          // Reemplazar solo el último path con el actualizado
           setPaths(prevPaths => [...prevPaths.slice(0, -1), updatedPath]);
         },
         onPanResponderRelease: () => {
-          // El path ya está guardado, solo reiniciamos el trazo actual
           currentPath.current = [];
         },
       })
     ).current;
 
+    // 👇 Aquí agregamos el botón de borrar
     return (
       <View style={styles.container}>
         <View style={[styles.canvas, { height, width: width - 40 }]} {...panResponder.panHandlers}>
@@ -114,10 +106,24 @@ export const SimpleSignaturePad = React.forwardRef<any, SimpleSignaturePadProps>
             ))}
           </Svg>
         </View>
+
+        {/* 🗑️ Botón borrar firma */}
+         <TouchableOpacity
+          style={styles.clearButton}
+          onPress={() => {
+            setPaths([]);
+            currentPath.current = [];
+            onPathsChange?.([]);
+          }}
+        >
+          <EvilIcons name="trash" size={28} color="#fff" />
+          <Text style={styles.clearButtonText}>Borrar firma</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 );
+
 
 const styles = StyleSheet.create({
   container: {
@@ -134,6 +140,24 @@ const styles = StyleSheet.create({
   },
   svg: {
     backgroundColor: 'transparent',
+  },
+
+ 
+  clearButton: {
+    flexDirection: 'row', // 👈 icono + texto
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    backgroundColor: '#ff4d4d',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+  },
+  clearButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 4,
+    fontSize: 16,
   },
 });
 

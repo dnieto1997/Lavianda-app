@@ -1,839 +1,633 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  RefreshControl,
-  ActivityIndicator,
+  FlatList,
   TouchableOpacity,
-  Dimensions,
-  Alert,
-} from 'react-native';
-import { useAuth } from '../_layout';
-import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios';
-
-// --- Interfaces ---
-interface DashboardStats {
-  total_formularios: number;
-  formularios_hoy: number;
-  formularios_semana: number;
-  formularios_mes: number;
-  cumplimiento_promedio: number;
-  empresas_activas: number;
-  usuarios_activos: number;
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  TextInput,
+  useWindowDimensions,
   
-  // Nuevos campos para porcentajes reales
-  porcentaje_cambio_diario: number;
-  porcentaje_cambio_semanal: number;
-  porcentaje_cambio_mensual: number;
-  
-  // Datos de comparación
-  formularios_ayer: number;
-  formularios_semana_anterior: number;
-  formularios_mes_anterior: number;
-  
-  // Indicadores de tendencia
-  tendencia_diaria: 'positiva' | 'negativa';
-  tendencia_semanal: 'positiva' | 'negativa';
-  tendencia_mensual: 'positiva' | 'negativa';
-}
+} from "react-native";
+import axios from "axios";
+import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "../_layout";
+import { router } from "expo-router";
 
-interface FormularioStats {
-  fecha: string;
-  total: number;
-  cumple: number;
-  no_cumple: number;
-  no_aplica: number;
-}
+const API_URL = "https://operaciones.lavianda.com.co/api";
 
-interface EmpresaStats {
-  empresa_id: number;
-  empresa_nombre: string;
-  total_formularios: number;
-  porcentaje_cumplimiento: number;
-}
-
-// --- Configuración ---
-const API_BASE = 'https://operaciones.lavianda.com.co/api';
-const { width } = Dimensions.get('window');
-
-const COLORS = {
-  primary: '#C62828',
-  secondary: '#1976D2', 
-  success: '#4CAF50',
-  warning: '#FF9800',
-  error: '#F44336',
-  background: '#F5F5F5',
-  card: '#FFFFFF',
-  text: '#212121',
-  textSecondary: '#757575',
-  border: '#E0E0E0',
-};
+const MESES = [
+  { id: 1, label: "Enero" },
+  { id: 2, label: "Febrero" },
+  { id: 3, label: "Marzo" },
+  { id: 4, label: "Abril" },
+  { id: 5, label: "Mayo" },
+  { id: 6, label: "Junio" },
+  { id: 7, label: "Julio" },
+  { id: 8, label: "Agosto" },
+  { id: 9, label: "Septiembre" },
+  { id: 10, label: "Octubre" },
+  { id: 11, label: "Noviembre" },
+  { id: 12, label: "Diciembre" },
+];
 
 export default function DashboardScreen() {
   const { user } = useAuth();
+  const authUser: any = user;
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 900;
+
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-  const [formularioStats, setFormularioStats] = useState<FormularioStats[]>([]);
-  const [empresaStats, setEmpresaStats] = useState<EmpresaStats[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+  const [supervisores, setSupervisores] = useState<any[]>([]);
+  const [totalEmpresas, setTotalEmpresas] = useState(0);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [supervisor, setSupervisor] = useState<any>(null);
+  const [empresas, setEmpresas] = useState<any[]>([]);
+  const [loadingDetalle, setLoadingDetalle] = useState(false);
+
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [anio, setAnio] = useState(String(new Date().getFullYear()));
+  const [showYearPicker, setShowYearPicker] = useState(false);
+const [yearDate, setYearDate] = useState(new Date());
 
   useEffect(() => {
-    if (user?.token) {
-      loadDashboardData();
-    }
-  }, [user?.token, selectedPeriod]);
+    cargarDashboard();
+  }, []);
 
-  const loadDashboardData = async () => {
+  const cargarDashboard = async () => {
     try {
-      setLoading(true);
-      
-      console.log('🔍 Dashboard: Iniciando carga de datos...');
-      console.log('🔑 Token presente:', user?.token ? 'SÍ' : 'NO');
+      const [resStats, resEmpresas] = await Promise.all([
+        axios.get(`${API_URL}/dashboard/stats`, {
+          headers: { Authorization: `Bearer ${authUser?.token}` },
+        }),
+        axios.get(`${API_URL}/dashboard/empresas-stats`, {
+          headers: { Authorization: `Bearer ${authUser?.token}` },
+        }),
+      ]);
 
-      const headers = {
-        'Authorization': `Bearer ${user?.token}`,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      };
-
-      console.log('📡 Headers configurados para dashboard');
-
-      // Cargar estadísticas principales
-      try {
-        console.log('📊 Solicitando estadísticas del dashboard...');
-        const statsResponse = await axios.get(`${API_BASE}/dashboard/stats`, { 
-          headers,
-          timeout: 10000 
-        });
-        
-        console.log('✅ Estadísticas recibidas:', statsResponse.data);
-        setDashboardStats(statsResponse.data);
-      } catch (statsError) {
-        console.error('❌ Error al cargar estadísticas:', statsError);
-        if (axios.isAxiosError(statsError)) {
-          console.error('Status:', statsError.response?.status);
-          console.error('Data:', statsError.response?.data);
-        }
-      }
-
-      // Cargar estadísticas de formularios
-      try {
-        console.log('📈 Solicitando estadísticas de formularios...');
-        const formStatsResponse = await axios.get(`${API_BASE}/dashboard/formularios-stats?period=${selectedPeriod}`, { 
-          headers,
-          timeout: 10000 
-        });
-        
-        console.log('✅ Estadísticas de formularios recibidas:', formStatsResponse.data);
-        setFormularioStats(Array.isArray(formStatsResponse.data) ? formStatsResponse.data : []);
-      } catch (formError) {
-        console.error('❌ Error al cargar estadísticas de formularios:', formError);
-        setFormularioStats([]);
-      }
-
-      // Cargar estadísticas de empresas
-      try {
-        console.log('🏢 Solicitando estadísticas de empresas...');
-        const empresasStatsResponse = await axios.get(`${API_BASE}/dashboard/empresas-stats`, { 
-          headers,
-          timeout: 10000 
-        });
-        
-        console.log('✅ Estadísticas de empresas recibidas:', empresasStatsResponse.data);
-        setEmpresaStats(Array.isArray(empresasStatsResponse.data) ? empresasStatsResponse.data : []);
-      } catch (empresasError) {
-        console.error('❌ Error al cargar estadísticas de empresas:', empresasError);
-        setEmpresaStats([]);
-      }
-
-    } catch (error) {
-      console.error('❌ Error general en loadDashboardData:', error);
-      Alert.alert(
-        'Error de Conexión',
-        'No se pudieron cargar los datos del dashboard. Verifica tu conexión a internet.'
-      );
+      setSupervisores(resStats.data.supervisores || []);
+      setTotalEmpresas(resEmpresas.data.total_empresas_creadas || 0);
     } finally {
       setLoading(false);
-      setRefreshing(false);
-      console.log('🏁 Carga de dashboard completada');
     }
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadDashboardData();
+  const cargarEmpresas = async (
+  supervisorId: number,
+  mesParam = mes,
+  anioParam = anio
+) => {
+  setLoadingDetalle(true);
+  try {
+    const res = await axios.get(
+      `${API_URL}/dashboard/supervisor/${supervisorId}/empresas`,
+      {
+        params: {
+          mes: mesParam,
+          anio: anioParam,
+        },
+        headers: { Authorization: `Bearer ${authUser?.token}` },
+      }
+    );
+    setEmpresas(res.data.empresas || []);
+  } finally {
+    setLoadingDetalle(false);
+  }
+};
+
+
+  const irADetalle = (e: any) => {
+    setModalVisible(false)
+    router.push({
+      pathname: "/registro-detalle",
+      params: {
+        registroId: e.registro_cliente_id.toString(),
+        empresaNombre: e.empresa,
+      },
+    });
   };
 
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('es-CO').format(num);
-  };
+ 
 
-  const formatPercentage = (num: number) => {
-    return `${num.toFixed(1)}%`;
-  };
-
-  if (loading && !refreshing) {
+  if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Cargando dashboard...</Text>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#C62828" />
       </View>
     );
   }
 
-  return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {/* Header Mejorado */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>📊 Dashboard Ejecutivo</Text>
-            <Text style={styles.headerSubtitle}>Análisis en Tiempo Real</Text>
-            <Text style={styles.headerDate}>
-              {new Date().toLocaleDateString('es-CO', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </Text>
-          </View>
+ return (
+  <View style={styles.container}>
+    {/* HEADER */}
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>Dashboard</Text>
+    </View>
+
+    {/* ===== METRICAS ===== */}
+    <View style={styles.metricsRow}>
+      <View style={styles.metricCard}>
+        <Ionicons name="business" size={26} color="#C62828" />
+        <View>
+          <Text style={styles.metricValue}>{totalEmpresas}</Text>
+          <Text style={styles.metricLabel}>Empresas creadas</Text>
+        </View>
+      </View>
+
+      <View style={styles.metricCard}>
+        <Ionicons name="people" size={26} color="#1565C0" />
+        <View>
+          <Text style={styles.metricValue}>{supervisores.length}</Text>
+          <Text style={styles.metricLabel}>Supervisores</Text>
+        </View>
+      </View>
+    </View>
+
+    {/* ===== TITULO LISTADO ===== */}
+<View style={styles.sectionHeader}>
+  <Text style={styles.sectionTitle}>
+    Listado de supervisores por metas
+  </Text>
+  <Text style={styles.sectionSubtitle}>
+    Seguimiento del rendimiento mensual por supervisor
+  </Text>
+</View>
+
+    <FlatList
+      data={supervisores}
+      keyExtractor={(i) => i.supervisor_id.toString()}
+      contentContainerStyle={{ padding: 16 }}
+      renderItem={({ item }) => {
+        const ultimo = item.historial?.[item.historial.length - 1];
+
+     
+    
+
+        return (
           <TouchableOpacity
-            style={styles.refreshButton}
-            onPress={() => loadDashboardData()}
+            style={styles.supervisorCard}
+            onPress={() => {
+              setSupervisor(item);
+              cargarEmpresas(item.supervisor_id);
+              setModalVisible(true);
+            }}
           >
-            <Ionicons name="refresh" size={24} color="white" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Filtro de Período Mejorado */}
-      <View style={styles.periodSelector}>
-        <View style={styles.periodHeader}>
-          <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
-          <Text style={styles.sectionTitle}>Período de Análisis</Text>
-        </View>
-        <View style={styles.periodButtons}>
-          {[
-            { key: '7d', label: '7 días', icon: 'today-outline' },
-            { key: '30d', label: '30 días', icon: 'calendar-outline' },
-            { key: '90d', label: '90 días', icon: 'calendar-number-outline' },
-          ].map((period) => (
-            <TouchableOpacity
-              key={period.key}
-              style={[
-                styles.periodButton,
-                selectedPeriod === period.key && styles.periodButtonActive,
-              ]}
-              onPress={() => setSelectedPeriod(period.key as '7d' | '30d' | '90d')}
-            >
-              <Ionicons 
-                name={period.icon as any} 
-                size={16} 
-                color={selectedPeriod === period.key ? 'white' : COLORS.primary} 
-              />
-              <Text style={[
-                styles.periodButtonText,
-                selectedPeriod === period.key && styles.periodButtonTextActive,
-              ]}>
-                {period.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Estadísticas Principales */}
-      {dashboardStats && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="trending-up-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.sectionTitle}>Estadísticas Principales</Text>
-          </View>
-          
-          {/* Primera Fila - 2 Columnas */}
-          <View style={styles.statsRow}>
-            <StatsCard
-              title="Total Formularios"
-              value={formatNumber(dashboardStats.total_formularios)}
-              icon="document-text-outline"
-              color={COLORS.primary}
-              trend={`${dashboardStats.porcentaje_cambio_mensual >= 0 ? '+' : ''}${dashboardStats.porcentaje_cambio_mensual}%`}
-              subtitle="vs mes anterior"
-            />
-            <StatsCard
-              title="Formularios Hoy"
-              value={formatNumber(dashboardStats.formularios_hoy)}
-              icon="today-outline"
-              color={COLORS.secondary}
-              trend={`${dashboardStats.porcentaje_cambio_diario >= 0 ? '+' : ''}${dashboardStats.porcentaje_cambio_diario}%`}
-              subtitle="vs ayer"
-            />
-          </View>
-
-          {/* Segunda Fila - 2 Columnas */}
-          <View style={styles.statsRow}>
-            <StatsCard
-              title="Esta Semana"
-              value={formatNumber(dashboardStats.formularios_semana)}
-              icon="calendar-outline"
-              color={COLORS.success}
-              trend={`${dashboardStats.porcentaje_cambio_semanal >= 0 ? '+' : ''}${dashboardStats.porcentaje_cambio_semanal}%`}
-              subtitle="vs semana anterior"
-            />
-            <StatsCard
-              title="Este Mes"
-              value={formatNumber(dashboardStats.formularios_mes)}
-              icon="calendar-number-outline"
-              color={COLORS.warning}
-              trend={`${dashboardStats.porcentaje_cambio_mensual >= 0 ? '+' : ''}${dashboardStats.porcentaje_cambio_mensual}%`}
-              subtitle="vs mes anterior"
-            />
-          </View>
-
-          {/* Tercera Fila - 2 Columnas */}
-          <View style={styles.statsRow}>
-            <StatsCard
-              title="Cumplimiento"
-              value={formatPercentage(dashboardStats.cumplimiento_promedio)}
-              icon="checkmark-circle-outline"
-              color={COLORS.success}
-              trend={dashboardStats.tendencia_mensual === 'positiva' ? '+' + Math.abs(dashboardStats.porcentaje_cambio_mensual) + '%' : (dashboardStats.porcentaje_cambio_mensual === 0 ? 'estable' : dashboardStats.porcentaje_cambio_mensual + '%')}
-              subtitle="promedio general"
-              isPercentage={true}
-            />
-            <StatsCard
-              title="Empresas Activas"
-              value={formatNumber(dashboardStats.empresas_activas)}
-              icon="business-outline"
-              color={COLORS.secondary}
-              trend="estable"
-              subtitle="en el sistema"
-            />
-          </View>
-
-          {/* Sección Explicativa de Porcentajes */}
-          <View style={styles.explanationSection}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="information-circle-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>📈 Interpretación de Porcentajes</Text>
-            </View>
-            <View style={styles.explanationCard}>
-              <Text style={styles.explanationTitle}>¿Qué significan los porcentajes?</Text>
-              <View style={styles.explanationItem}>
-                <Text style={styles.explanationLabel}>🟢 Porcentajes Positivos (+):</Text>
-                <Text style={styles.explanationText}>Mejora respecto al período anterior</Text>
-              </View>
-              <View style={styles.explanationItem}>
-                <Text style={styles.explanationLabel}>🔴 Porcentajes Negativos (-):</Text>
-                <Text style={styles.explanationText}>Disminución respecto al período anterior</Text>
-              </View>
-              <View style={styles.explanationItem}>
-                <Text style={styles.explanationLabel}>⚫ Estable:</Text>
-                <Text style={styles.explanationText}>Sin cambios significativos</Text>
-              </View>
-              <View style={styles.explanationExample}>
-                <Text style={styles.exampleTitle}>Ejemplo:</Text>
-                <Text style={styles.exampleText}>
-                  Si hoy tienes {dashboardStats?.formularios_hoy || 0} formularios y ayer tuviste {dashboardStats?.formularios_ayer || 0}, 
-                  el cambio es de {dashboardStats?.porcentaje_cambio_diario >= 0 ? '+' : ''}{dashboardStats?.porcentaje_cambio_diario || 0}%
+            {/* HEADER CARD */}
+            <View style={styles.supervisorHeader}>
+              <Ionicons name="person-circle" size={34} color="#C62828" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.supervisorNombre}>
+                  {item.nombre_supervisor}
                 </Text>
+               
               </View>
-            </View>
-          </View>
-        </View>
-      )}
 
-      {/* Gráfico de Formularios por Fecha Mejorado */}
-      {formularioStats.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="bar-chart-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.sectionTitle}>Tendencia de Formularios</Text>
-          </View>
-          <View style={styles.chartWrapper}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.chartContainer}>
-                {formularioStats.map((stat, index) => (
-                  <View key={index} style={styles.chartBar}>
-                    <View style={styles.barContainer}>
-                      <View style={[styles.bar, styles.barCumple, { height: Math.max((stat.cumple / Math.max(...formularioStats.map(s => s.total))) * 100, 2) }]} />
-                      <View style={[styles.bar, styles.barNoCumple, { height: Math.max((stat.no_cumple / Math.max(...formularioStats.map(s => s.total))) * 100, 2) }]} />
-                      <View style={[styles.bar, styles.barNoAplica, { height: Math.max((stat.no_aplica / Math.max(...formularioStats.map(s => s.total))) * 100, 2) }]} />
-                    </View>
-                    <Text style={styles.chartLabel}>{new Date(stat.fecha).toLocaleDateString('es-CO', { month: 'short', day: 'numeric' })}</Text>
-                    <Text style={styles.chartValue}>{stat.total}</Text>
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-            <View style={styles.chartLegend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendColor, { backgroundColor: COLORS.success }]} />
-                <Text style={styles.legendText}>Cumple</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendColor, { backgroundColor: COLORS.error }]} />
-                <Text style={styles.legendText}>No Cumple</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendColor, { backgroundColor: COLORS.warning }]} />
-                <Text style={styles.legendText}>No Aplica</Text>
-              </View>
+              <Ionicons name="chevron-forward" size={22} color="#999" />
             </View>
-          </View>
-        </View>
-      )}
 
-      {/* Top Empresas */}
-      {empresaStats.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="business-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.sectionTitle}>Top Empresas por Actividad</Text>
-          </View>
-          {empresaStats.slice(0, 5).map((empresa, index) => (
-            <View key={empresa.empresa_id} style={styles.empresaItem}>
-              <View style={styles.empresaRank}>
-                <Text style={styles.rankNumber}>{index + 1}</Text>
-              </View>
-              <View style={styles.empresaInfo}>
-                <Text style={styles.empresaNombre}>{empresa.empresa_nombre}</Text>
-                <Text style={styles.empresaFormularios}>{empresa.total_formularios} formularios</Text>
-              </View>
-              <View style={styles.empresaCumplimiento}>
-                <Text style={styles.cumplimientoText}>{empresa.porcentaje_cumplimiento.toFixed(1)}%</Text>
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { 
-                    width: `${empresa.porcentaje_cumplimiento}%`,
-                    backgroundColor: empresa.porcentaje_cumplimiento >= 80 ? COLORS.success : 
-                                   empresa.porcentaje_cumplimiento >= 60 ? COLORS.warning : COLORS.error
-                  }]} />
-                </View>
-              </View>
+            {/* BODY */}
+           
+          </TouchableOpacity>
+        );
+      }}
+    />
+
+      {/* ================= MODAL ================= */}
+      <Modal transparent visible={modalVisible} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {supervisor?.nombre_supervisor}
+              </Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#fff" />
+              </TouchableOpacity>
             </View>
-          ))}
-        </View>
-      )}
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Última actualización: {new Date().toLocaleTimeString('es-CO')}</Text>
-        <Text style={styles.footerText}>Dashboard v2.0</Text>
-      </View>
+            {/* FILTROS */}
+         <View style={styles.filtersRow}>
+  {/* MESES */}
+  <View style={styles.mesesContainer}>
+    <Text style={{ fontSize: 12, fontWeight: "700", color: "#666", marginBottom: 4 }}>
+      Mes
+    </Text>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.mesesScroll}
+    >
+      {MESES.map((m) => (
+        <TouchableOpacity
+          key={m.id}
+          style={[
+            styles.mesBtn,
+            mes === m.id && styles.mesBtnActivo,
+          ]}
+          onPress={() => {
+            setMes(m.id);
+  cargarEmpresas(supervisor.supervisor_id, m.id, anio)
+          }}
+        >
+          <Text
+            style={[
+              styles.mesText,
+              mes === m.id && styles.mesTextActivo,
+            ]}
+          >
+            {m.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
     </ScrollView>
+      <View style={styles.anioContainer}>
+    <Text style={styles.anioLabel}>Año</Text>
+   <TextInput
+  value={anio}
+  onChangeText={setAnio}
+  onBlur={() =>
+    cargarEmpresas(
+      supervisor.supervisor_id,
+      mes,
+      anio
+    )
+  }
+  keyboardType="numeric"
+  maxLength={4}
+  style={styles.yearInput}
+/>
+
+  </View>
+  </View>
+
+  {/* AÑO */}
+
+</View>
+
+
+            {/* TABLA */}
+            {loadingDetalle ? (
+              <ActivityIndicator size="large" color="#C62828" />
+            ) : (
+              <ScrollView horizontal={!isDesktop} contentContainerStyle={{ padding: 20 }}>
+                <View style={{ minWidth: isDesktop ? 1000 : 800 }}>
+                  <View style={styles.tableHeader}>
+                    <Text style={[styles.th, { flex: 3 }]}>Empresa</Text>
+                    <Text style={[styles.th, { flex: 1 }]}>Visitas</Text>
+                    <Text style={[styles.th, { flex: 1 }]}>Meta</Text>
+                    <Text style={[styles.th, { flex: 3 }]}>Rendimiento</Text>
+                  </View>
+
+                  {empresas.map((e, idx) => {
+                    const porcentaje = Number(e.porcentaje) || 0;
+
+                    return (
+                      <View key={idx} style={styles.tableRow}>
+                        {/* EMPRESA + BOTÓN */}
+                        <View style={[styles.cell, { flex: 3 }]}>
+                          <Text style={styles.empresaNombre}>{e.empresa}</Text>
+                          <TouchableOpacity
+                            style={styles.botonEntrar}
+                            onPress={() => irADetalle(e)}
+                          >
+                            <Ionicons
+                              name="enter-outline"
+                              size={16}
+                              color="#fff"
+                            />
+                            <Text style={styles.textoEntrar}>ENTRAR</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={[styles.cell, { flex: 1 }]}>
+                          <Text>{e.visitas}</Text>
+                        </View>
+
+                        <View style={[styles.cell, { flex: 1 }]}>
+                          <Text>{e.meta}</Text>
+                        </View>
+
+                        {/* RENDIMIENTO */}
+                        <View style={[styles.cell, { flex: 3 }]}>
+                          <Text
+                            style={[
+                              styles.rendimientoText,
+                              {
+                                color:
+                                  porcentaje >= 100
+                                    ? "#2E7D32"
+                                    : "#C62828",
+                              },
+                            ]}
+                          >
+                            {porcentaje.toFixed(1)}%
+                          </Text>
+
+                          <View style={styles.track}>
+                            <View
+                              style={[
+                                styles.fill,
+                                {
+                                  width: `${Math.min(porcentaje, 100)}%`,
+                                  backgroundColor:
+                                    porcentaje >= 100
+                                      ? "#2E7D32"
+                                      : "#C62828",
+                                },
+                              ]}
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
-// --- Componentes ---
-interface StatsCardProps {
-  title: string;
-  value: string;
-  icon: string;
-  color: string;
-  trend?: string;
-  subtitle?: string;
-  isPercentage?: boolean;
-}
-
-const StatsCard: React.FC<StatsCardProps> = ({ title, value, icon, color, trend, subtitle, isPercentage }) => (
-  <View style={styles.statsCard}>
-    <View style={styles.statsContent}>
-      <View style={styles.statsHeader}>
-        <Ionicons name={icon as any} size={24} color={color} />
-        {trend && (
-          <View style={[
-            styles.trendBadge, 
-            { backgroundColor: trend.includes('+') ? COLORS.success : trend === 'estable' ? COLORS.warning : COLORS.error }
-          ]}>
-            <Text style={styles.trendText}>{trend}</Text>
-          </View>
-        )}
-      </View>
-      <Text style={styles.statsTitle}>{title}</Text>
-      <Text style={[styles.statsValue, { color }]}>{value}</Text>
-      {subtitle && <Text style={styles.statsSubtitle}>{subtitle}</Text>}
-    </View>
-  </View>
-);
+/* ===================== STYLES ===================== */
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.background,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: COLORS.textSecondary,
-  },
-  header: {
-    backgroundColor: COLORS.primary,
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerText: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 4,
-  },
-  headerDate: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
-    textTransform: 'capitalize',
-  },
-  refreshButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 20,
-    padding: 10,
-  },
-  section: {
-    backgroundColor: COLORS.card,
-    margin: 15,
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginLeft: 8,
-  },
-  periodSelector: {
-    backgroundColor: COLORS.card,
-    margin: 15,
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  periodHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  periodButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  periodButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginHorizontal: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
-  },
-  periodButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  periodButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.text,
-    marginLeft: 6,
-  },
-  periodButtonTextActive: {
-    color: 'white',
-  },
-  
-  // Estilos para filas de 2 columnas
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
+  container: { flex: 1, backgroundColor: "#F4F6F8" },
+  header: { backgroundColor: "#C62828", padding: 30 },
+  headerTitle: { color: "#fff", fontSize: 22, fontWeight: "800",top:20,textAlign:'center' },
+
   statsCard: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
+    backgroundColor: "#fff",
+    margin: 16,
     padding: 16,
-    marginHorizontal: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    minHeight: 120,
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 12,
   },
-  statsContent: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  statsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  statsTitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: COLORS.textSecondary,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  statsValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  statsSubtitle: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  trendBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    alignSelf: 'flex-start',
-  },
-  trendText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  
-  // Estilos para la sección explicativa
-  explanationSection: {
-    marginTop: 15,
-  },
-  explanationCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  explanationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 15,
-  },
-  explanationItem: {
-    flexDirection: 'column',
+  filtersRow: {
+  padding: 16,
+  borderBottomWidth: 1,
+  borderBottomColor: "#EEE",
+
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 16,
+
+  // clave para responsive
+  flexWrap: "wrap",
+},
+
+/* ===== MESES ===== */
+mesesContainer: {
+  flex: 1,
+  minWidth: 280,
+},
+
+mesesScroll: {
+  alignItems: "center",
+  gap: 6,
+},
+
+mesBtn: {
+  backgroundColor: "#EEE",
+  paddingVertical: 6,
+  paddingHorizontal: 14,
+  borderRadius: 20,
+},
+
+mesBtnActivo: {
+  backgroundColor: "#C62828",
+},
+
+mesText: {
+  fontSize: 12,
+  fontWeight: "600",
+  color: "#333",
+},
+
+mesTextActivo: {
+  color: "#fff",
+},
+
+/* ===== AÑO ===== */
+anioContainer: {
+  minWidth: 40,
+  top:10
+},
+
+anioLabel: {
+  fontSize: 12,
+  fontWeight: "700",
+  color: "#666",
+  marginBottom: 4,
+},
+
+yearInput: {
+  backgroundColor: "#F1F1F1",
+  borderRadius: 12,
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  fontSize: 14,
+  textAlign: "center",
+},
+
+
+  statsValue: { fontSize: 24, fontWeight: "800" },
+  statsLabel: { color: "#777" },
+
+  card: {
+    backgroundColor: "#fff",
+    padding: 16,
+    borderRadius: 16,
     marginBottom: 12,
   },
-  explanationLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 4,
+
+  nombre: { fontWeight: "700", fontSize: 16 },
+  small: { fontSize: 12, color: "#666", marginTop: 4 },
+  percent: { fontWeight: "800", marginTop: 6 },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  explanationText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginLeft: 10,
+
+  modalBox: {
+    width: "95%",
+    maxWidth: 1400,
+    height: "90%",
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    overflow: "hidden",
   },
-  explanationExample: {
-    backgroundColor: COLORS.background,
-    borderRadius: 8,
+
+  modalHeader: {
+    backgroundColor: "#C62828",
+    padding: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+
+  modalTitle: { color: "#fff", fontWeight: "800" },
+
+ sectionHeader: {
+  paddingHorizontal: 16,
+  marginTop: 22,
+  marginBottom: 12,
+},
+
+sectionTitle: {
+  fontSize: 18,
+  fontWeight: "800",
+  color: "#222",
+},
+
+sectionSubtitle: {
+  fontSize: 13,
+  color: "#777",
+  marginTop: 4,
+},
+
+
+  tableHeader: {
+    flexDirection: "row",
+    backgroundColor: "#F1F1F1",
+    borderRadius: 12,
     padding: 12,
-    marginTop: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
   },
-  exampleTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.primary,
+
+  th: { fontWeight: "800", fontSize: 13 },
+
+  tableRow: {
+    flexDirection: "row",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEE",
+  },
+
+  cell: {
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+
+  empresaNombre: {
+    fontWeight: "700",
     marginBottom: 6,
   },
-  exampleText: {
+
+  botonEntrar: {
+    backgroundColor: "#167cfc",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+  },
+
+  textoEntrar: {
+    color: "#fff",
+    fontWeight: "800",
     fontSize: 12,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
   },
-  
-  chartWrapper: {
-    marginTop: 10,
-  },
-  chartContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 10,
-    height: 120,
-  },
-  chartBar: {
-    alignItems: 'center',
-    marginHorizontal: 8,
-    minWidth: 40,
-  },
-  barContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: 80,
-    marginBottom: 8,
-  },
-  bar: {
-    width: 8,
-    marginHorizontal: 1,
-    borderRadius: 2,
-  },
-  barCumple: {
-    backgroundColor: COLORS.success,
-  },
-  barNoCumple: {
-    backgroundColor: COLORS.error,
-  },
-  barNoAplica: {
-    backgroundColor: COLORS.warning,
-  },
-  chartLabel: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginBottom: 2,
-  },
-  chartValue: {
+
+  rendimientoText: {
+    fontWeight: "800",
     fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.text,
-    textAlign: 'center',
+    marginBottom: 4,
   },
-  chartLegend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 15,
-    paddingTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 10,
-  },
-  legendColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  legendText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  empresaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.background,
+
+  track: {
+    height: 8,
+    backgroundColor: "#E0E0E0",
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    overflow: "hidden",
   },
-  empresaRank: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  rankNumber: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  empresaInfo: {
-    flex: 1,
-    marginRight: 15,
-  },
-  empresaNombre: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 2,
-  },
-  empresaFormularios: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  empresaCumplimiento: {
-    alignItems: 'flex-end',
-    minWidth: 80,
-  },
-  cumplimientoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 5,
-  },
-  progressBar: {
-    width: 60,
-    height: 6,
-    backgroundColor: COLORS.border,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  footer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: 5,
-  },
+
+  fill: { height: 8 },
+
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  metricsRow: {
+  flexDirection: "row",
+  gap: 12,
+  paddingHorizontal: 16,
+  marginTop: 16,
+},
+
+metricCard: {
+  flex: 1,
+  backgroundColor: "#fff",
+  borderRadius: 16,
+  padding: 16,
+  flexDirection: "row",
+  gap: 12,
+  alignItems: "center",
+},
+
+metricValue: {
+  fontSize: 22,
+  fontWeight: "800",
+},
+
+metricLabel: {
+  fontSize: 12,
+  color: "#777",
+},
+
+supervisorCard: {
+  backgroundColor: "#fff",
+  borderRadius: 18,
+  padding: 16,
+  marginBottom: 14,
+},
+
+supervisorHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 8,
+},
+
+supervisorNombre: {
+  fontSize: 16,
+  fontWeight: "800",
+},
+
+supervisorSub: {
+  fontSize: 12,
+  color: "#777",
+},
+
+supervisorPorcentaje: {
+  fontWeight: "800",
+  marginBottom: 6,
+},
+
+trackMini: {
+  height: 6,
+  backgroundColor: "#EEE",
+  borderRadius: 6,
+  overflow: "hidden",
+},
+
+fillMini: {
+  height: 6,
+  borderRadius: 6,
+},
+
+sinDatos: {
+  fontSize: 12,
+  color: "#999",
+  fontStyle: "italic",
+},
+
+
 });

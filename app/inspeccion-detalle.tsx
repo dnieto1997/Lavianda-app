@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  Dimensions 
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,6 +72,9 @@ export default function InspeccionDetalle() {
   const { user } = useAuth();
   const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null);
   const [loading, setLoading] = useState(true);
+  const screenWidth = Dimensions.get('window').width;
+  const firmaWidth = screenWidth - 64; // 16px padding a cada lado
+const firmaHeight = (firmaWidth * 150) / 300; // mantiene proporción original
 
   useEffect(() => {
     console.log('🔍 [InspeccionDetalle] useEffect ejecutado');
@@ -333,41 +337,48 @@ export default function InspeccionDetalle() {
 
       {/* Firma del Supervisor */}
       {inspeccion.firma_supervisor_base64 && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>FIRMA DEL SUPERVISOR</Text>
-          
-          {inspeccion.nombre_supervisor && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Nombre:</Text>
-              <Text style={styles.infoValue}>{inspeccion.nombre_supervisor}</Text>
-            </View>
-          )}
-          
-          {inspeccion.cedula_supervisor && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Cédula:</Text>
-              <Text style={styles.infoValue}>{inspeccion.cedula_supervisor}</Text>
-            </View>
-          )}
-          
-          {inspeccion.fecha_firma_supervisor && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Fecha de firma:</Text>
-              <Text style={styles.infoValue}>
-                {new Date(inspeccion.fecha_firma_supervisor).toLocaleString('es-CO')}
-              </Text>
-            </View>
-          )}
-          
-          <View style={styles.firmaContainer}>
-            <SvgXml
-              xml={atob(inspeccion.firma_supervisor_base64.split(',')[1])}
-              width="100%"
-              height={150}
-            />
-          </View>
-        </View>
-      )}
+  <View style={styles.card}>
+    <Text style={styles.cardTitle}>FIRMA DEL SUPERVISOR</Text>
+
+    {inspeccion.nombre_supervisor && (
+      <View style={styles.infoRow}>
+        <Text style={styles.infoLabel}>Nombre:</Text>
+        <Text style={styles.infoValue}>{inspeccion.nombre_supervisor}</Text>
+      </View>
+    )}
+
+    {inspeccion.cedula_supervisor && (
+      <View style={styles.infoRow}>
+        <Text style={styles.infoLabel}>Cédula:</Text>
+        <Text style={styles.infoValue}>{inspeccion.cedula_supervisor}</Text>
+      </View>
+    )}
+
+    {inspeccion.fecha_firma_supervisor && (
+      <View style={styles.infoRow}>
+        <Text style={styles.infoLabel}>Fecha de firma:</Text>
+        <Text style={styles.infoValue}>
+          {new Date(inspeccion.fecha_firma_supervisor).toLocaleString('es-CO')}
+        </Text>
+      </View>
+    )}
+
+    <View style={styles.firmaContainer}>
+      {(() => {
+        const paddingHorizontal = 32; // padding total del card
+        const firmaWidth = screenWidth - paddingHorizontal;
+        const firmaHeight = (firmaWidth * 150) / 250; // proporción 2:1 (original)
+        return (
+          <SvgXml
+            xml={atob(inspeccion.firma_supervisor_base64.split(',')[1])}
+            width={firmaWidth}
+            height={firmaHeight}
+          />
+        );
+      })()}
+    </View>
+  </View>
+)}
 
       {/* Ubicación */}
       {(inspeccion.latitud || inspeccion.longitud) && (
@@ -619,17 +630,17 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   firmaContainer: {
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: COLORS.background,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-  },
+  marginTop: 16,
+  padding: 16,
+  backgroundColor: COLORS.background,
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+  alignItems: 'center',
+},
   firmaImage: {
     width: '100%',
-    height: 150,
+    height: 300,
     maxWidth: 400,
   },
   debugText: {

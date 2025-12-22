@@ -101,7 +101,9 @@ function useProtectedRoute(user: AuthenticatedUser | null, isReady: boolean) {
       segments.includes("formulario-visita-simple") ||
       segments.includes("formulario-evaluacion-servicio") ||
       segments.includes("inspeccion-detalle") ||
-      segments.includes("evaluacion-servicio-detalle")
+      segments.includes("evaluacion-servicio-detalle")||
+      segments.includes("formulario-inicio-servicio")||
+      segments.includes("formulario-novedades-servicio")
 
     console.log("🔍 Navegación - Segmentos:", segments)
     console.log("🔍 Usuario autenticado:", !!user)
@@ -263,6 +265,9 @@ function RootLayoutWithLocation() {
           <Stack.Screen name="formulario-acta-inicio" options={{ headerShown: true, title: "Formulario Acta de Inicio" }} />
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="reset-password" options={{ headerShown: true, title: "Restablecer Contraseña" }} />
+          <Stack.Screen name="formulario-inicio-servicio" options={{ headerShown: true, title: "Formulario Inicio de Servicio" }} />
+          <Stack.Screen name="formulario-novedades-servicio" options={{ headerShown: true, title: "Novedades de Servicio" }} />
+          
           
       </Stack>
     </AuthContext.Provider>

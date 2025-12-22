@@ -42,6 +42,8 @@ interface Empresa {
   nombre: string;
   centro_costo: string;
   identificacion?: string; // NIT o cédula
+  ciudad:string;
+  type:string;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +88,8 @@ export default function OperacionesScreen() {
     nombre: '',
     centro_costo: '',
     identificacion: '',
+    type:'',
+    ciudad:''
   });
 
   // Estados para registros de clientes
@@ -98,12 +102,21 @@ export default function OperacionesScreen() {
   const [formularios, setFormularios] = useState<FormularioData[]>([]);
   const [showFormulariosModal, setShowFormulariosModal] = useState(false);
   const [registroSeleccionado, setRegistroSeleccionado] = useState<RegistroCliente | null>(null);
+   const [tabActual, setTabActual] = useState<'empresas' | 'registros'>('registros');
 
   // Estados de carga
   const [savingEmpresa, setSavingEmpresa] = useState(false);
   const [savingRegistro, setSavingRegistro] = useState(false);
   const [loadingFormularios, setLoadingFormularios] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState(false);
+  const [busquedaEmpresa, setBusquedaEmpresa] = useState('');
+const [busquedaRegistro, setBusquedaRegistro] = useState('');
+const itemsPorPagina = 20;
+const [paginaEmpresa, setPaginaEmpresa] = useState(1);
+const [paginaRegistro, setPaginaRegistro] = useState(1);
+const [refreshingEmpresa, setRefreshingEmpresa] = useState(false);
+const [refreshingRegistro, setRefreshingRegistro] = useState(false);
+
 
   // Verificar permisos de administrador
   const isAdmin = user?.userData?.role === 'admin' || user?.userData?.role === 'root';
@@ -222,6 +235,19 @@ export default function OperacionesScreen() {
     }
   };
 
+  const refreshEmpresas = async () => {
+  setRefreshingEmpresa(true);
+  await onRefresh();  // tu función que recarga todo
+  setRefreshingEmpresa(false);
+};
+
+const refreshRegistros = async () => {
+  setRefreshingRegistro(true);
+  await onRefresh();
+  setRefreshingRegistro(false);
+};
+
+
   const loadFormularios = async () => {
     try {
       // Usar el endpoint correcto que acabamos de crear
@@ -243,12 +269,15 @@ export default function OperacionesScreen() {
 
   // --- FUNCIONES CRUD EMPRESAS ---
   const openEmpresaModal = (empresa?: Empresa) => {
+    
     if (empresa) {
       setEditingEmpresa(empresa);
       setEmpresaForm({
         nombre: empresa.nombre,
         centro_costo: empresa.centro_costo,
         identificacion: empresa.identificacion || '',
+        type:empresa.type,
+        ciudad:empresa.ciudad
       });
     } else {
       setEditingEmpresa(null);
@@ -256,6 +285,8 @@ export default function OperacionesScreen() {
         nombre: '',
         centro_costo: '',
         identificacion: '',
+        ciudad:'',
+        type:''
       });
     }
     setShowEmpresaModal(true);
@@ -280,11 +311,11 @@ export default function OperacionesScreen() {
         : `${API_BASE}/empresas`;
       
       const method = editingEmpresa ? 'put' : 'post';
-      
+         console.log(empresaForm)
       const response = await axios[method](url, empresaForm, {
         headers: { 'Authorization': `Bearer ${user?.token}` }
       });
-
+          
       Alert.alert(
         'Éxito', 
         `Empresa ${editingEmpresa ? 'actualizada' : 'creada'} correctamente`
@@ -355,6 +386,12 @@ export default function OperacionesScreen() {
     setShowEmpresaSelector(false);
     setShowRegistroModal(true);
   };
+
+  const ITEMS = 10;
+
+
+
+
 
   const guardarRegistroCliente = async () => {
     if (!empresaSeleccionada) {
@@ -428,6 +465,8 @@ export default function OperacionesScreen() {
       Alert.alert('Error', 'No se pudo abrir el formulario');
     }
   };
+
+
 
   // Función para crear inspección de supervisión
   const crearInspeccionSupervision = (registro: RegistroCliente) => {
@@ -530,82 +569,103 @@ ${registro.ultimo_formulario ? `Último formulario: ${formatDate(registro.ultimo
 
   // --- COMPONENTES DE RENDERIZADO ---
   const renderEmpresaCard = ({ item }: { item: Empresa }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.empresaInfo}>
-          <Text style={styles.empresaNombre}>
-            {typeof item.nombre === 'string' ? item.nombre : 'Empresa sin nombre'}
-          </Text>
-          <Text style={styles.empresaCentro}>
-            Centro de costo: {typeof item.centro_costo === 'string' ? item.centro_costo : 'Sin centro'}
-          </Text>
-          {item.identificacion && (
-            <Text style={styles.empresaIdentificacion}>
-              NIT/Cédula: {typeof item.identificacion === 'string' ? item.identificacion : 'Sin identificación'}
-            </Text>
-          )}
-          <Text style={styles.empresaId}>ID: {item.id}</Text>
+  <View style={styles.cardMejorado}>
+    <View style={styles.cardHeaderMejorado}>
+
+      {/* Información */}
+      <View style={{ flex: 1 }}>
+        <Text style={styles.cardTitulo}>{item.nombre ?? 'Empresa sin nombre'}</Text>
+
+        <View style={styles.cardFila}>
+          <Ionicons name="briefcase-outline" size={14} />
+          <Text style={styles.cardSub}>Centro de costo: {item.centro_costo ?? 'Sin centro'}</Text>
         </View>
-        {isAdmin && (
-          <View style={styles.cardActions}>
-            <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: COLORS.warning }]}
-              onPress={() => openEmpresaModal(item)}
-            >
-              <Ionicons name="pencil" size={16} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: COLORS.error }]}
-              onPress={() => deleteEmpresa(item)}
-            >
-              <Ionicons name="trash" size={16} color="white" />
-            </TouchableOpacity>
+
+        {item.identificacion && (
+          <View style={styles.cardFila}>
+            <Ionicons name="id-card-outline" size={14} />
+            <Text style={styles.cardSub}>NIT/Cédula: {item.identificacion}</Text>
+          </View>
+        )}
+
+        <View style={styles.cardFila}>
+          <Ionicons name="information-circle-outline" size={14} />
+          <Text style={styles.cardId}>ID: {item.id}</Text>
+        </View>
+      </View>
+
+      {/* Acciones de Admin */}
+      {isAdmin && (
+        <View style={styles.cardAcciones}>
+          <TouchableOpacity
+            style={[styles.botonIcono, { backgroundColor: "#167cfc"}]}
+            onPress={() => openEmpresaModal(item)}
+          >
+            <Ionicons name="pencil-outline" size={18} color="white" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.botonIcono, { backgroundColor: COLORS.error }]}
+            onPress={() => deleteEmpresa(item)}
+          >
+            <Ionicons name="trash-outline" size={18} color="white" />
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  </View>
+);
+
+
+  const renderRegistroCard = ({ item }: { item: RegistroCliente }) => (
+  <View style={styles.cardMejorado}>
+    <View style={styles.cardHeaderMejorado}>
+
+      <View style={{ flex: 1 }}>
+        <Text style={styles.cardTitulo}>{item.empresa_nombre ?? 'Empresa sin nombre'}</Text>
+
+        <View style={styles.cardFila}>
+          <Ionicons name="person-circle-outline" size={15} />
+          <Text style={styles.cardSub}>Supervisor: {item.supervisor ?? 'Sin asignar'}</Text>
+        </View>
+
+        <View style={styles.cardFila}>
+          <Ionicons name="calendar-outline" size={15} />
+          <Text style={styles.cardSub}>Creado: {formatDate(item.fecha_creacion)}</Text>
+        </View>
+
+        <View style={styles.cardFila}>
+          <Ionicons name="create-outline" size={15} />
+          <Text style={styles.cardSub}>Por: {item.creado_por ?? 'Desconocido'}</Text>
+        </View>
+
+       {/*  <View style={styles.cardFila}>
+          <Ionicons name="clipboard-outline" size={15} />
+          <Text style={styles.cardId}>Formularios: {item.formularios_count ?? 0}</Text>
+        </View> */}
+
+        {item.ultimo_formulario && (
+          <View style={styles.cardFila}>
+            <Ionicons name="time-outline" size={15} />
+            <Text style={styles.cardId}>Último: {formatDate(item.ultimo_formulario)}</Text>
           </View>
         )}
       </View>
-    </View>
-  );
 
-  const renderRegistroCard = ({ item }: { item: RegistroCliente }) => (
-    <View style={styles.registroCard}>
-      <View style={styles.registroInfo}>
-        <Text style={styles.registroEmpresa}>
-          {typeof item.empresa_nombre === 'string' ? item.empresa_nombre : 'Empresa sin nombre'}
-        </Text>
-        <Text style={styles.registroId}>ID: {item.id}</Text>
-        <Text style={styles.registroSupervisor}>
-          Supervisor: {typeof item.supervisor === 'string' ? item.supervisor : 'Sin asignar'}
-        </Text>
-        <Text style={styles.registroFecha}>
-          Creado: {formatDate(item.fecha_creacion)}
-        </Text>
-        <Text style={styles.registroCreador}>
-          Por: {typeof item.creado_por === 'string' ? item.creado_por : 'Desconocido'}
-        </Text>
-        {item.formularios_count !== undefined && (
-          <Text style={styles.registroFormularios}>
-            📋 Formularios: {item.formularios_count}
-          </Text>
-        )}
-        {item.ultimo_formulario && (
-          <Text style={styles.registroUltimo}>
-            📅 Último: {formatDate(item.ultimo_formulario)}
-          </Text>
-        )}
-      </View>
-      
-      <View style={styles.registroActions}>
-        {/* Botón principal - Entrar */}
-        <TouchableOpacity 
-          style={styles.entrarButton}
+      <View style={styles.cardAcciones}>
+        <TouchableOpacity
+          style={styles.botonEntrar}
           onPress={() => goToRegistroDetalle(item)}
         >
-          <Ionicons name="enter-outline" size={16} color="white" />
-          <Text style={styles.entrarButtonText}>ENTRAR</Text>
+          <Ionicons name="enter-outline" size={18} color="white" />
+          <Text style={styles.textoEntrar}>ENTRAR</Text>
         </TouchableOpacity>
       </View>
+
     </View>
-  );
+  </View>
+);
+
 
   if (loading && empresas.length === 0 && registrosClientes.length === 0) {
     return (
@@ -621,77 +681,193 @@ ${registro.ultimo_formulario ? `Último formulario: ${formatDate(registro.ultimo
     );
   }
 
+
+
+const empresasFiltradas = empresas.filter(e =>
+  e.nombre?.toLowerCase().includes(busquedaEmpresa.toLowerCase())
+);
+
+const totalPaginasEmpresa = Math.ceil(empresasFiltradas.length / ITEMS);
+
+const empresasPagina = empresasFiltradas.slice(
+  (paginaEmpresa - 1) * ITEMS,
+  paginaEmpresa * ITEMS
+);
+
+const registrosFiltrados = registrosClientes.filter(r =>
+  r.empresa_nombre?.toLowerCase().includes(busquedaRegistro.toLowerCase()) ||
+  r.supervisor?.toLowerCase().includes(busquedaRegistro.toLowerCase()) ||
+  r.creado_por?.toLowerCase().includes(busquedaRegistro.toLowerCase())
+);
+
+const totalPaginasRegistro = Math.ceil(registrosFiltrados.length / ITEMS);
+
+const registrosMostrados = registrosFiltrados.slice(
+  (paginaRegistro - 1) * ITEMS,
+  paginaRegistro * ITEMS
+);
+
+
+
+
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Operaciones</Text>
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
-          <Ionicons name="refresh" size={20} color="white" />
-        </TouchableOpacity>
+     <View style={styles.header}>
+  <Text style={styles.title}>Operaciones</Text>
+  <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+    <Ionicons name="refresh" size={20} color="white" />
+  </TouchableOpacity>
+</View>
+
+{/* 🔴 TABS ROJOS NATIVOS */}
+<View style={styles.tabsContainer}>
+  {/* ➤ TAB EMPRESAS solo si es admin */}
+  {isAdmin && (
+    <TouchableOpacity
+      style={[styles.tabButton, tabActual === 'empresas' && styles.tabActivo]}
+      onPress={() => setTabActual('empresas')}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Ionicons name="business" size={18} color="white" />
+        <Text style={styles.tabText}>Empresas / Clientes</Text>
       </View>
+    </TouchableOpacity>
+  )}
 
-      <ScrollView 
-        style={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+  {/* ➤ TAB REGISTROS para todos */}
+  <TouchableOpacity
+    style={[styles.tabButton, tabActual === 'registros' && styles.tabActivo]}
+    onPress={() => setTabActual('registros')}
+  >
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Ionicons name="document-text" size={18} color="white" />
+      <Text style={styles.tabText}>Registros de Clientes</Text>
+    </View>
+  </TouchableOpacity>
+</View>
+{/* --- CONTENIDO TAB EMPRESAS (solo admins pueden verlo) --- */}
+{tabActual === 'empresas' && isAdmin && (
+  <View style={[styles.section, { marginHorizontal: 14, marginTop: 10, marginBottom: 20, flex: 1 }]}>
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>Empresas / Clientes</Text>
+    </View>
+
+    <TextInput
+      placeholder="Buscar empresa..."
+      value={busquedaEmpresa}
+      onChangeText={text => {
+        setBusquedaEmpresa(text);
+        setPaginaEmpresa(1);
+      }}
+      style={[styles.buscador, { marginBottom: 12, marginTop: 6, paddingHorizontal: 12 }]}
+    />
+
+    <Text style={styles.countText}>{empresasFiltradas.length} empresas encontradas</Text>
+
+    <TouchableOpacity style={styles.createButton} onPress={() => openEmpresaModal()}>
+      <Ionicons name="business" size={18} color="white" />
+      <Text style={styles.createButtonText}>CREAR EMPRESA</Text>
+    </TouchableOpacity>
+
+    <FlatList
+      data={empresasPagina}
+      keyExtractor={item => `empresa-${item.id}`}
+      renderItem={renderEmpresaCard}
+      showsVerticalScrollIndicator={false}
+      removeClippedSubviews
+      contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 8, paddingBottom: 20, gap: 12 }}
+    />
+
+    <View style={styles.paginacionContainer}>
+      <TouchableOpacity
+        disabled={paginaEmpresa === 1}
+        onPress={() => setPaginaEmpresa(paginaEmpresa - 1)}
+        style={[styles.btnPage, paginaEmpresa === 1 && styles.btnDisabled]}
       >
-        {/* Sección Empresas/Clientes - Solo Admin */}
-        {isAdmin && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Empresas/Clientes</Text>
-              <TouchableOpacity 
-                style={styles.createButton}
-                onPress={() => openEmpresaModal()}
-              >
-                <Ionicons name="add" size={18} color="white" />
-                <Text style={styles.createButtonText}>CREAR EMPRESA/CLIENTE</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <FlatList
-              data={empresas}
-              keyExtractor={(item) => `empresa-${item.id}`}
-              renderItem={renderEmpresaCard}
-              scrollEnabled={false}
-              showsVerticalScrollIndicator={false}
-            />
-          </View>
-        )}
+        <Text style={styles.txtPage}>◀</Text>
+      </TouchableOpacity>
+      <Text style={styles.pageInfo}>Página {paginaEmpresa} de {totalPaginasEmpresa}</Text>
+      <TouchableOpacity
+        disabled={paginaEmpresa === totalPaginasEmpresa}
+        onPress={() => setPaginaEmpresa(paginaEmpresa + 1)}
+        style={[styles.btnPage, paginaEmpresa === totalPaginasEmpresa && styles.btnDisabled]}
+      >
+        <Text style={styles.txtPage}>▶</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+)}
 
-        {/* Sección Registros de Clientes */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Registros de Clientes</Text>
-            {/* Solo mostrar botón crear registro a administradores */}
-            {isAdmin && (
-              <TouchableOpacity 
-                style={styles.createButton}
-                onPress={openRegistroModal}
-              >
-                <Ionicons name="document-text" size={18} color="white" />
-                <Text style={styles.createButtonText}>CREAR REGISTRO CLIENTE</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          <FlatList
-            data={registrosClientes}
-            keyExtractor={(item) => `registro-${item.id}`}
-            renderItem={renderRegistroCard}
-            scrollEnabled={false}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons name="document-outline" size={64} color={COLORS.textSecondary} />
-                <Text style={styles.emptyText}>
-                  {isAdmin ? 'No hay registros de clientes' : 'No tienes registros asignados'}
-                </Text>
-              </View>
-            }
-          />
+
+
+{/* --- CONTENIDO TAB REGISTROS (lo ven todos, creación solo admins) --- */}
+{tabActual === 'registros' && (
+  <View style={[styles.section, { marginHorizontal: 14, marginTop: 10, marginBottom: 20,flex:1 }]}>
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>Registros de Clientes</Text>
+    </View>
+
+    <TextInput
+      placeholder="Buscar registro..."
+      value={busquedaRegistro}
+      onChangeText={text => {
+        setBusquedaRegistro(text);
+        setTabActual('registros');
+        setPaginaRegistro(1);
+      }}
+      style={[styles.buscador, { marginBottom: 10, marginTop: 4, paddingHorizontal: 12 }]}
+    />
+
+    <Text style={styles.countText}>{registrosFiltrados.length} registros encontrados</Text>
+
+    {/* ➤ Botón crear solo admins */}
+    {isAdmin && (
+      <TouchableOpacity style={styles.createButton} onPress={openRegistroModal}>
+        <Ionicons name="document-text" size={16} color="white" />
+        <Text style={styles.createButtonText}>CREAR REGISTRO CLIENTE</Text>
+      </TouchableOpacity>
+    )}
+
+    <FlatList
+      data={registrosMostrados}
+      keyExtractor={item => `registro-${item.id}`}
+      renderItem={renderRegistroCard}
+      onEndReachedThreshold={0.5}
+      removeClippedSubviews
+      showsVerticalScrollIndicator={false}
+      refreshing={refreshingRegistro}
+      onRefresh={refreshRegistros}
+      ListEmptyComponent={
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No hay registros encontrados</Text>
         </View>
-      </ScrollView>
+      }
+      contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 8, paddingBottom: 20, gap: 12 }}
+      ListFooterComponent={<View style={{ height: 160 }} />}
+    />
+
+    <View style={styles.paginacionContainer}>
+      <TouchableOpacity
+        disabled={paginaRegistro === 1}
+        onPress={() => setPaginaRegistro(paginaRegistro - 1)}
+        style={[styles.btnPage, paginaRegistro === 1 && styles.btnDisabled]}
+      >
+        <Text style={styles.txtPage}>◀</Text>
+      </TouchableOpacity>
+      <Text style={styles.pageInfo}>Página {paginaRegistro} de {totalPaginasRegistro}</Text>
+      <TouchableOpacity
+        disabled={paginaRegistro === totalPaginasRegistro}
+        onPress={() => setPaginaRegistro(paginaRegistro + 1)}
+        style={[styles.btnPage, paginaRegistro === totalPaginasRegistro && styles.btnDisabled]}
+      >
+        <Text style={styles.txtPage}>▶</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+)}
+
+
 
       {/* Modal Crear/Editar Empresa */}
       <Modal
@@ -750,6 +926,28 @@ ${registro.ultimo_formulario ? `Último formulario: ${formatDate(registro.ultimo
                 value={empresaForm.identificacion}
                 onChangeText={(text) => setEmpresaForm({...empresaForm, identificacion: text})}
                 placeholder="Ingrese el NIT de la empresa o número de cédula"
+                editable={!savingEmpresa}
+              />
+            </View>
+
+             <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Ciudad</Text>
+              <TextInput
+                style={styles.textInput}
+                value={empresaForm.ciudad}
+                onChangeText={(text) => setEmpresaForm({...empresaForm, ciudad: text})}
+                placeholder="Ingrese Ciudad"
+                editable={!savingEmpresa}
+              />
+            </View>
+
+               <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Tipo de Cliente</Text>
+              <TextInput
+                style={styles.textInput}
+                value={empresaForm.type}
+                onChangeText={(text) => setEmpresaForm({...empresaForm, type: text})}
+                placeholder="Ingrese Tipo de Cliente"
                 editable={!savingEmpresa}
               />
             </View>
@@ -977,6 +1175,9 @@ ${registro.ultimo_formulario ? `Último formulario: ${formatDate(registro.ultimo
               ))}
               </>
             )}
+
+
+            
           </ScrollView>
         </View>
       </Modal>
@@ -1012,34 +1213,98 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
-  },
-  createButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  createButtonText: {
-    color: 'white',
-    fontWeight: '600',
-    marginLeft: 6,
-    fontSize: 12,
-  },
+section: {
+  marginBottom: 24,
+},
+
+sectionHeader: {
+  marginBottom: 12,
+},
+
+sectionTitle: {
+  fontSize: 20,
+  fontWeight: 'bold',
+  color: COLORS.textPrimary,
+},
+ createButton: {
+  backgroundColor: "#7ed957",
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  alignSelf: 'flex-start', // evita que ocupe todo el ancho
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  borderRadius: 6,
+  gap: 4,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.1,
+  shadowRadius: 2,
+  elevation: 2,
+},
+
+paginacionContainer: {
+  flexDirection: 'row',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginTop: 6,
+  marginBottom: 2,
+  paddingVertical: 0,  // 👈 sin espacio extra
+  height: 20,          // 👈 compacto
+},
+btnPage: {
+  width: 28,
+  height: 24,          // 👈 mismo alto del contenedor
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderRadius: 6,
+  marginHorizontal: 6,
+  backgroundColor: '#d32f2f',
+},
+
+txtPage: {
+  fontSize: 14,        // tamaño normal de flechas
+  fontWeight: 'bold',
+  color: 'white',
+},
+
+pageInfo: {
+  fontSize: 14,
+  fontWeight: '600',
+},
+btnDisabled: {
+  opacity: 0.4
+}
+,
+
+createButtonText: {
+  color: 'white',
+  fontWeight: '600',
+  fontSize: 11,
+},
+
+tabsContainer: {
+  flexDirection: 'row',
+  backgroundColor: COLORS.primary,
+  paddingVertical: 10,
+  justifyContent: 'space-around',
+  alignItems: 'center'
+},
+tabButton: {
+  paddingVertical: 8,
+  paddingHorizontal: 12
+},
+tabText: {
+  color: 'white',
+  fontWeight: 'bold',
+  fontSize: 15
+},
+tabActivo: {
+  borderBottomWidth: 3,
+  borderBottomColor: 'white'
+},
+
+
   card: {
     backgroundColor: COLORS.card,
     borderRadius: 12,
@@ -1084,6 +1349,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  buscador: {
+  backgroundColor: 'white',
+  paddingVertical: 10,
+  paddingHorizontal: 16,
+  borderRadius: 12,
+  fontSize: 15,
+  borderWidth: 2,
+  borderColor: '#ff3b3b',
+  elevation: 3,
+  shadowOpacity: 0.07,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 2 },
+  marginBottom: 14,
+},
+
   actionButton: {
     borderRadius: 6,
     padding: 8,
@@ -1166,6 +1446,110 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginLeft: 4,
   },
+  cardMejorado: {
+  backgroundColor: 'white',
+  borderRadius: 16,
+  padding: 14,
+  marginBottom: 12,
+  elevation: 3,
+  shadowOpacity: 0.08,
+  shadowRadius: 6,
+  shadowOffset: { width: 0, height: 3 },
+  borderLeftWidth: 5,
+  borderLeftColor: '#c00',
+},
+
+cardHeaderMejorado: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 10,
+},
+
+cardTitulo: {
+  fontSize: 17,
+  fontWeight: 'bold',
+  color: '#000',
+  marginBottom: 6,
+},
+
+cardSub: {
+  fontSize: 14,
+  color: '#444',
+},
+
+cardId: {
+  fontSize: 13,
+  color: '#888',
+  fontWeight: '600'
+},
+countText: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+    color: "#222",
+    marginHorizontal: 4
+  },
+
+
+cardFila: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 5,
+  marginTop: 3
+},
+
+cardAcciones: {
+  flexDirection: 'column',
+  gap: 6,
+  justifyContent: 'center'
+},
+
+botonIcono: {
+  width: 38,
+  height: 38,
+  borderRadius: 10,
+  justifyContent: 'center',
+  alignItems: 'center'
+},
+
+botonEntrar: {
+  backgroundColor: '#167cfc',
+  paddingVertical: 10,
+  paddingHorizontal: 14,
+  borderRadius: 12,
+  flexDirection: 'row',
+  gap: 6,
+  elevation: 2,
+  alignItems: 'center'
+},
+
+textoEntrar: {
+  color: 'white',
+  fontWeight: '800',
+  fontSize: 13,
+  letterSpacing: 0.6
+},
+
+searchContainer: {
+  flexDirection: 'row',
+  backgroundColor: 'white',
+  borderWidth: 1,
+  borderColor: '#ddd',
+  borderRadius: 12,
+  paddingHorizontal: 10,
+  paddingVertical: 7,
+  alignItems: 'center',
+  gap: 6,
+  marginBottom: 14
+},
+
+searchInput: {
+  flex: 1,
+  fontSize: 15,
+  paddingVertical: 6,
+  color: '#000'
+},
+
   actionButtonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

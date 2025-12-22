@@ -298,7 +298,7 @@ export default function FormularioInspeccionSupervision() {
         [
           { text: 'Cancelar', style: 'cancel' },
           { text: 'Tomar Foto', onPress: () => tomarFoto(area) },
-          { text: 'Elegir de Galería', onPress: () => elegirFoto(area) },
+    
         ]
       );
     }
@@ -560,7 +560,7 @@ export default function FormularioInspeccionSupervision() {
 
        try {
       console.log('🔐 Iniciando tracking de formulario...');
-      await startTracking(String(token), 'form_start');
+      await startTracking(String(token), 'Formulario_Inpeccion');
       console.log('✅ Punto FORM_START enviado');
 
       const sessionId = `session_${Date.now()}`;
@@ -633,7 +633,7 @@ export default function FormularioInspeccionSupervision() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Dirección</Text>
+            <Text style={styles.label}>Dirección *</Text>
             <TextInput
               style={styles.input}
               value={formData.direccion}
@@ -644,7 +644,7 @@ export default function FormularioInspeccionSupervision() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Ciudad</Text>
+            <Text style={styles.label}>Ciudad *</Text>
             <TextInput
               style={styles.input}
               value={formData.ciudad}

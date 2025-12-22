@@ -6,6 +6,7 @@ import { useAuth } from '../_layout';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+
 export default function TabLayout() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -13,6 +14,7 @@ export default function TabLayout() {
   const userRole = user?.userData?.role;
   const isAdmin = userRole === 'admin' || userRole === 'root';
   const isEmployee = userRole === 'empleado';
+  
 
   return (
     <Tabs
@@ -94,6 +96,17 @@ export default function TabLayout() {
           href: isAdmin ? '/admin-users' : null,
           tabBarIcon: ({ color, size = 24 }) => (
             <Ionicons name="people-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+        <Tabs.Screen
+        name="metas"
+        options={{ 
+          title: 'Metas',
+          href: isAdmin ? '/metas' : null,
+          tabBarIcon: ({ color, size = 24 }) => (
+            <Ionicons name="trophy-outline" size={size} color={color} />
           ),
         }}
       />

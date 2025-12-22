@@ -60,7 +60,7 @@ export default function HomeScreen() {
   const executeLogout = async () => {
     if (user?.token) {
       try {
-        await startTracking(user.token, 'logout');
+    
       } catch (e) {
         console.warn("No se pudo registrar ubicación de logout", e);
       }
@@ -128,14 +128,14 @@ export default function HomeScreen() {
                 title="Gestión de Usuarios"
                 description="Administra cuentas y permisos"
                 icon="people-outline"
-                color={COLORS.admin}
+                color="#8daebf"
                 onPress={() => router.push('/(tabs)/admin-users')}
               />
               <ActionCard
                 title="Dashboard Ejecutivo"
                 description="Estadísticas y métricas"
                 icon="analytics-outline"
-                color={COLORS.admin}
+                color="#5ce1e6"
                 onPress={() => router.push('/(tabs)/dashboard')}
               />
               <ActionCard
@@ -144,6 +144,14 @@ export default function HomeScreen() {
                 icon="business-outline"
                 color={COLORS.primary}
                 onPress={() => router.push('/(tabs)/operaciones')}
+              />
+
+              <ActionCard
+                title="Metas"
+                description="Metas Por cumplir"
+                icon="trophy-outline"
+                color="#7ed957"
+                onPress={() => router.push('/(tabs)/metas')}
               />
             </>
           )}

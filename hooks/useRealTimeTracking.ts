@@ -25,6 +25,8 @@ interface LocationPoint {
   timestamp: string;
   type: LocationType;
   formId?: number | null;
+  sessionId:any
+  
 }
 
 interface SessionRoute {
@@ -141,7 +143,6 @@ export const useRealTimeTracking = (): UseRealTimeTrackingReturn => {
         `${API_BASE}/locations?user_id=${userId}&date=${date}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-       console.log(data)
       if (data?.success) {
        
         const points: LocationPoint[] = data.data.map(item => ({
@@ -150,6 +151,7 @@ export const useRealTimeTracking = (): UseRealTimeTrackingReturn => {
           timestamp: item.timestamp,
           type: item.type,
           formId: item.formId ?? null,
+          sessionId:item.sessionId
         }));
         setSelectedUserRoute(points);
       } else {
@@ -220,6 +222,7 @@ export const useRealTimeTracking = (): UseRealTimeTrackingReturn => {
             longitude: data.longitude,
             timestamp: data.timestamp,
             type: 'tracking',
+            sessionId:data.sessionId
           });
           return [...prev];
         });
@@ -256,6 +259,7 @@ export const useRealTimeTracking = (): UseRealTimeTrackingReturn => {
         longitude: data.longitude,
         timestamp: data.timestamp || new Date().toISOString(),
         type: 'tracking',
+        sessionId:data.sessionId
       };
 
       setSelectedUserRoute(prev => [...prev, newPoint]);

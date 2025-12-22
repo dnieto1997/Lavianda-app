@@ -141,7 +141,6 @@ export default function FormularioSupervisionSimple() {
         'Selecciona una opción',
         [
           { text: 'Tomar foto', onPress: () => tomarFoto(area) },
-          { text: 'Galería', onPress: () => seleccionarDeGaleria(area) },
           { text: 'Cancelar', style: 'cancel' }
         ]
       );
@@ -313,8 +312,8 @@ export default function FormularioSupervisionSimple() {
     // 📍 --- TRACKING FORM_START ---
     try {
       console.log('🛰️ Iniciando tracking para form_start...');
-      await startTracking(token, 'form_start');
-      console.log('✅ Punto de form_start enviado correctamente.');
+      await startTracking(token, 'Informe_de_Supervisión');
+      console.log('✅ Punto INFORME DE SUPERVISIÓN enviado');
 
       const sessionId = `form_${Date.now()}`;
       await startBackgroundTracking(token, sessionId);
@@ -419,7 +418,7 @@ export default function FormularioSupervisionSimple() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Ciudad</Text>
+            <Text style={styles.label}>Ciudad *</Text>
             <TextInput
               style={styles.input}
               value={formData.ciudad}

@@ -25,7 +25,7 @@
         "NSPhotoLibraryUsageDescription": "Esta app necesita acceso a la galería para seleccionar fotos de perfil."
       },
       "config": {
-        "googleMapsApiKey": "AIzaSyDkvW0YqFTDRpRVZaUC9K2nemQbYswzVCs"
+        "googleMapsApiKey": "AIzaSyBrbXX5PmDsDY2O6COmRmevJj1R1IC1L7E"
       },
       "bundleIdentifier": "com.fabricciodev_21.operacioneslaviandaapp"
     },
@@ -49,7 +49,7 @@
       "package": "com.fabricciodev_21.operacioneslaviandaapp",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyDkvW0YqFTDRpRVZaUC9K2nemQbYswzVCs"
+          "apiKey": "AIzaSyBrbXX5PmDsDY2O6COmRmevJj1R1IC1L7E"
         }
       }
     },
@@ -76,9 +76,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "2bea2c68-a382-4088-8c42-9cc36d31c116"
+        "projectId": "6a25df89-ba7f-4f47-9eb8-7968aeb0a825"
       }
     },
-    "owner": "dnieto6190"
+    "owner": "lavianda"
   }
 }
