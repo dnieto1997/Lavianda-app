@@ -21,7 +21,7 @@ import { useLocation } from '../contexts/LocationContext'; // Asegúrate de que 
 // --- Paleta de Colores ---
 const COLORS = {
   primary: '#C62828',
-  background: '#E3F2FD',
+  background: '#FFFFFF',
   card: '#FFFFFF',
   textPrimary: '#212121',
   textSecondary: '#757575',
@@ -77,22 +77,8 @@ export default function LoginScreen() {
         // Nota: signIn no es async, no necesita await
         signIn(user, token);
         
-        // 🗺️ 3. INICIAR TRACKING DE UBICACIÓN
-        try {
-          console.log(`🔐 Iniciando tracking con token`);
-          
-          // ✅ Paso 1: Enviar punto de login
-         await startTracking(token, 'login');
-          console.log('✅ Punto de Login enviado');
-          
-          // ✅ Paso 2: Iniciar tracking en background REAL (producción)
-          const sessionId = `session_${Date.now()}`;
-          await startBackgroundTracking(token, sessionId);
-          console.log('🎯 Tracking en background iniciado');
-
-        } catch (trackingError) {
-          console.error('⚠️ Error en tracking:', trackingError);
-        }
+   
+   
         
         console.log('✅ Usuario autenticado:', user.name, 'Rol:', user.role);
 

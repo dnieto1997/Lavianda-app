@@ -143,7 +143,7 @@ export default function FormularioInspeccionSupervision() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const signatureRef = useRef<any>(null);
-   const { startTracking, startBackgroundTracking } = useLocation();
+   const { startTracking } = useLocation();
   
   const [saving, setSaving] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -220,6 +220,7 @@ export default function FormularioInspeccionSupervision() {
         headers: { 
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+            'Accept': 'application/json'
         },
         timeout: 10000, // 10 segundos timeout
       });
@@ -564,7 +565,7 @@ export default function FormularioInspeccionSupervision() {
       console.log('✅ Punto FORM_START enviado');
 
       const sessionId = `session_${Date.now()}`;
-      await startBackgroundTracking(String(token), sessionId);
+      //await startBackgroundTracking(String(token), sessionId);
       console.log('🎯 Tracking en background iniciado');
     } catch (trackingError) {
       console.warn('⚠️ Error al iniciar tracking:', trackingError);
@@ -612,7 +613,7 @@ export default function FormularioInspeccionSupervision() {
               />
             </View>
             <View style={styles.halfInput}>
-              <Text style={styles.label}>Fecha</Text>
+              <Text style={styles.label}>Fec1ha</Text>
               <TextInput
                 style={[styles.input, styles.readOnlyInput]}
                 value={formData.fecha}

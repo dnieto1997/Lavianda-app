@@ -34,6 +34,7 @@ interface EvaluacionServicio {
   registro_cliente_id: number;
   
   // Campos reales del backend
+  servicio_generales: boolean;
   servicio_mantenimiento: boolean;
   servicio_otro: boolean;
   servicio_cual?: string;
@@ -79,14 +80,29 @@ export default function EvaluacionServicioDetalle() {
 
   // Función para obtener el tipo de servicio
   const getTipoServicio = (evaluacion: EvaluacionServicio): string => {
-    if (evaluacion.servicio_mantenimiento) {
-      return 'MANTENIMIENTO';
-    }
-    if (evaluacion.servicio_otro) {
-      return evaluacion.servicio_cual ? evaluacion.servicio_cual.toUpperCase() : 'OTRO';
-    }
-    return 'NO ESPECIFICADO';
-  };
+  const servicios: string[] = [];
+
+  if (evaluacion.servicio_generales) {
+    servicios.push('SERVICIOS GENERALES');
+  }
+
+  if (evaluacion.servicio_mantenimiento) {
+    servicios.push('MANTENIMIENTO');
+  }
+
+  if (evaluacion.servicio_otro) {
+    servicios.push(
+      evaluacion.servicio_cual
+        ? `OTRO (${evaluacion.servicio_cual.toUpperCase()})`
+        : 'OTRO'
+    );
+  }
+
+  return servicios.length > 0
+    ? servicios.join(' · ')
+    : 'NO ESPECIFICADO';
+};
+
 
   // Función para obtener la calificación como string
   const getCalificacion = (evaluacion: EvaluacionServicio): string => {
@@ -124,7 +140,12 @@ export default function EvaluacionServicioDetalle() {
         {
           headers: {
             Authorization: `Bearer ${user?.token}`,
+             'Content-Type': 'application/json',
+            'Accept': 'application/json'
+            
+            
           },
+          
         }
       );
 
@@ -245,9 +266,43 @@ export default function EvaluacionServicioDetalle() {
 
         {/* Tipo de Servicio */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>TIPO DE SERVICIO</Text>
-          <Text style={styles.infoValue}>{getTipoServicio(evaluacion)}</Text>
-        </View>
+  <Text style={styles.cardTitle}>TIPO DE SERVICIO</Text>
+
+  <View style={styles.serviciosContainer}>
+    {evaluacion.servicio_generales && (
+      <View style={[styles.servicioChip, styles.servicioGenerales]}>
+        <Ionicons name="construct-outline" size={16} color="#1E3A8A" />
+        <Text style={styles.servicioText}>Servicios Generales</Text>
+      </View>
+    )}
+
+    {evaluacion.servicio_mantenimiento && (
+      <View style={[styles.servicioChip, styles.servicioMantenimiento]}>
+        <Ionicons name="settings-outline" size={16} color="#2E7D32" />
+        <Text style={styles.servicioText}>Mantenimiento</Text>
+      </View>
+    )}
+
+    {evaluacion.servicio_otro && (
+      <View style={[styles.servicioChip, styles.servicioOtro]}>
+        <Ionicons name="layers-outline" size={16} color="#EF6C00" />
+        <Text style={styles.servicioText}>
+          {evaluacion.servicio_cual
+            ? `Otro: ${evaluacion.servicio_cual}`
+            : 'Otro'}
+        </Text>
+      </View>
+    )}
+
+    {!evaluacion.servicio_generales &&
+      !evaluacion.servicio_mantenimiento &&
+      !evaluacion.servicio_otro && (
+        <Text style={styles.infoValue}>No especificado</Text>
+      )}
+  </View>
+</View>
+
+
 
         {/* Datos del Cliente */}
         <View style={styles.card}>
@@ -408,6 +463,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
+  
   backButton: {
     padding: 5,
   },
@@ -530,4 +586,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  badgeContainer: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  marginTop: 8,
+},
+
+serviciosContainer: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 8,
+},
+
+servicioChip: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 20,
+  marginBottom: 8,
+},
+
+servicioText: {
+  marginLeft: 6,
+  fontSize: 13,
+  fontWeight: '600',
+},
+
+servicioGenerales: {
+  backgroundColor: '#FFFFFF',
+},
+
+servicioMantenimiento: {
+  backgroundColor: '#E8F5E9',
+},
+
+servicioOtro: {
+  backgroundColor: '#FFF3E0',
+},
+
+
 });

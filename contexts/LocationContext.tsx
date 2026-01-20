@@ -1,23 +1,24 @@
-// --- START OF FILE contexts/LocationContext.tsx (VERSIÓN OPTIMIZADA) ---
-
-import React, { createContext, useContext, useCallback, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  ReactNode,
+  useEffect,
+} from "react";
 import axios from "axios";
-import { Alert, Platform } from "react-native";
+import { Platform, Alert, PermissionsAndroid,AppState,Modal, View, Text, TouchableOpacity } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Linking from "expo-linking";
 
 /* ----------------------------------------------------------
-   IMPORTACIONES CONDICIONALES (solo móvil)
+   IMPORTACIONES CONDICIONALES
 ---------------------------------------------------------- */
 let Location: any = null;
 let TaskManager: any = null;
 
 if (Platform.OS !== "web") {
-  try {
-    Location = require("expo-location");
-    TaskManager = require("expo-task-manager");
-  } catch {
-    console.log("⚠️ Expo Location no disponible");
-  }
+  Location = require("expo-location");
+  TaskManager = require("expo-task-manager");
 }
 
 /* ----------------------------------------------------------
@@ -27,367 +28,441 @@ const API_BASE = "https://operaciones.lavianda.com.co/api";
 const LOCATION_TASK_NAME = "background-location-task";
 
 /* ----------------------------------------------------------
-   TIPOS
+   CONTROL TRACKING
+---------------------------------------------------------- */
+const MIN_DISTANCE = 20;                 // metros para considerar movimiento
+const MOVE_INTERVAL = 5000;              // 5 segundos
+const STILL_INTERVAL = 10 * 60 * 1000;   // 10 minutos
+const MAX_ACCURACY = 300;
+
+/* ----------------------------------------------------------
+   TYPES
 ---------------------------------------------------------- */
 interface LocationContextType {
-  startTracking: (
-    token: string,
-    type:
-      | "login"
-      | "logout"
-      | "Acta_de_Inicio"
-      | "Formulario_Inpeccion"
-      | "Informe_de_Supervisión"
-      | "Inicio_servicio"
-      | "Novedades_servicio"
-  ) => Promise<void>;
-
-  startBackgroundTracking: (token: string, sessionId: string) => Promise<void>;
-
+  startTracking: (token: string, type: string) => Promise<void>;
+  startBackgroundTracking: () => Promise<void>;
   stopBackgroundTracking: () => Promise<void>;
-
   isTrackingActive: () => Promise<boolean>;
 }
 
 /* ----------------------------------------------------------
-   STORAGE KEYS
+   STORAGE
 ---------------------------------------------------------- */
 const STORAGE_KEYS = {
   TOKEN: "tracking_token",
   SESSION: "tracking_session",
   ACTIVE: "tracking_active",
-  LAST_LOC: "tracking_last_location", // { lat, lng, ts }
+  LAST_LOC: "tracking_last_location",
+  LAST_TIME: "tracking_last_time",
+  QUEUE: "tracking_queue", // 🆕
 };
 
 /* ----------------------------------------------------------
-   UTIL HELPERS
+   HELPERS
 ---------------------------------------------------------- */
-const haversineDistanceMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+const haversine = (a: number, b: number, c: number, d: number) => {
+  const R = 6371000;
   const toRad = (v: number) => (v * Math.PI) / 180;
-  const R = 6371000; // metres
-  const φ1 = toRad(lat1);
-  const φ2 = toRad(lat2);
-  const Δφ = toRad(lat2 - lat1);
-  const Δλ = toRad(lon2 - lon1);
-
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
+  const dLat = toRad(c - a);
+  const dLon = toRad(d - b);
+  return (
+    2 *
+    R *
+    Math.atan2(
+      Math.sqrt(
+        Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(a)) * Math.cos(toRad(c)) * Math.sin(dLon / 2) ** 2
+      ),
+      Math.sqrt(
+        1 -
+          (Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(a)) *
+              Math.cos(toRad(c)) *
+              Math.sin(dLon / 2) ** 2)
+      )
+    )
+  );
 };
 
-const saveLastLocation = async (lat: number, lng: number) => {
+const generateSessionId = () =>
+  `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+const enqueueLocation = async (payload: any) => {
+  const raw = await AsyncStorage.getItem(STORAGE_KEYS.QUEUE);
+  const queue = raw ? JSON.parse(raw) : [];
+  queue.push(payload);
+  await AsyncStorage.setItem(STORAGE_KEYS.QUEUE, JSON.stringify(queue));
+};
+
+
+
+
+
+
+
+
+const flushQueue = async () => {
+  const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+  if (!token) return;
+
+  const raw = await AsyncStorage.getItem(STORAGE_KEYS.QUEUE);
+  if (!raw) return;
+
+  const queue = JSON.parse(raw);
+  if (!queue.length) return;
+
+  const remaining = [];
+
+  for (const item of queue) {
+    try {
+      await axios.post(`${API_BASE}/locations`, item, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000,
+      });
+    } catch {
+      remaining.push(item); // ❌ no se pudo enviar
+    }
+  }
+
+  await AsyncStorage.setItem(
+    STORAGE_KEYS.QUEUE,
+    JSON.stringify(remaining)
+  );
+};
+
+const isGpsReallyEnabled = async (): Promise<boolean> => {
+  if (Platform.OS === "web") return true;
+
+  return await Location.hasServicesEnabledAsync();
+};
+
+
+const isGpsWorking = async (): Promise<boolean> => {
   try {
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.LAST_LOC,
-      JSON.stringify({ lat, lng, ts: Date.now() })
+    await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Lowest,
+      timeout: 4000,
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+
+/* ----------------------------------------------------------
+   PERMISOS
+---------------------------------------------------------- */
+const requestPermissionsOrSettings = async (): Promise<boolean> => {
+  if (Platform.OS === "web") return true;
+
+  if (Platform.OS === "android" && Platform.Version >= 33) {
+    await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
     );
-  } catch (err) {
-    console.log("⚠️ Error guardando last loc", err);
   }
-};
 
-const getLastLocation = async (): Promise<{ lat: number; lng: number } | null> => {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEYS.LAST_LOC);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.lat != null && parsed.lng != null) return { lat: parsed.lat, lng: parsed.lng };
-    return null;
-  } catch (err) {
-    console.log("⚠️ Error leyendo last loc", err);
-    return null;
+  let fg = await Location.getForegroundPermissionsAsync();
+  if (fg.status !== "granted") {
+    fg = await Location.requestForegroundPermissionsAsync();
   }
+
+  if (fg.status !== "granted") {
+    Alert.alert(
+      "Permiso requerido",
+      "La app necesita acceso a tu ubicación",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Abrir ajustes", onPress: () => Linking.openSettings() },
+      ]
+    );
+    return false;
+  }
+
+  let bg = await Location.getBackgroundPermissionsAsync();
+  if (bg.status !== "granted") {
+    bg = await Location.requestBackgroundPermissionsAsync();
+  }
+
+  if (bg.status !== "granted") {
+    Alert.alert(
+      "Permiso en segundo plano",
+      "Permite ubicación siempre",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Abrir ajustes", onPress: () => Linking.openSettings() },
+      ]
+    );
+    return false;
+  }
+
+  return true;
 };
 
 /* ----------------------------------------------------------
-   BACKGROUND TASK (Solo móvil)
+   BACKGROUND TASK
 ---------------------------------------------------------- */
 if (Platform.OS !== "web" && TaskManager) {
-  TaskManager.defineTask(
-    LOCATION_TASK_NAME,
-    async ({ data, error }: { data: any; error: any }) => {
-      if (error) {
-        console.log("❌ Error BACKGROUND TASK:", error);
-        return;
-      }
+  TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: any) => {
+  if (error || !data?.locations?.length) return;
 
-      if (!data) return;
-      const { locations } = data;
-      if (!locations || locations.length === 0) return;
+  const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+  const sessionId = await AsyncStorage.getItem(STORAGE_KEYS.SESSION);
+  if (!token || !sessionId) return;
 
-      try {
-        const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
-        const sessionId = await AsyncStorage.getItem(STORAGE_KEYS.SESSION);
-        if (!token || !sessionId) {
-          // no token/session -> nada que enviar
-          return;
-        }
+  const loc = data.locations[data.locations.length - 1];
+  const { latitude, longitude, accuracy = 999 } = loc.coords;
+  if (accuracy > MAX_ACCURACY) return;
 
-        const lastLoc = await getLastLocation();
+  const lastRaw = await AsyncStorage.getItem(STORAGE_KEYS.LAST_LOC);
+  const lastTimeRaw = await AsyncStorage.getItem(STORAGE_KEYS.LAST_TIME);
 
-        for (const loc of locations) {
-          if (!loc.coords) continue;
+  const now = Date.now();
+  let shouldInsert = false;
 
-          const { latitude, longitude, accuracy, speed = 0, heading = 0, altitude = 0 } = loc.coords;
+  if (lastRaw && lastTimeRaw) {
+    const last = JSON.parse(lastRaw);
+    const dist = haversine(last.lat, last.lng, latitude, longitude);
+    const elapsed = now - Number(lastTimeRaw);
 
-          // FILTRO: descartamos points sin accuracy o con accuracy alta (> 20m)
-          if (!accuracy || accuracy > 20) {
-            console.log("⛔ Punto descartado en BG por precisión (>20m):", accuracy);
-            continue;
-          }
+    if (dist >= MIN_DISTANCE && elapsed >= MOVE_INTERVAL) shouldInsert = true;
+    if (dist < MIN_DISTANCE && elapsed >= STILL_INTERVAL) shouldInsert = true;
+  } else {
+    shouldInsert = true;
+  }
 
-          // FILTRO: descartamos saltos enormes respecto al último punto enviado (si existe)
-          if (lastLoc) {
-            const dist = haversineDistanceMeters(lastLoc.lat, lastLoc.lng, latitude, longitude);
-            // Si la distancia es muy grande y la precisión no es perfecta, descartamos
-            if (dist > 200 && accuracy > 15) {
-              console.log("⛔ Punto descartado en BG por salto detectado:", Math.round(dist), "m, accuracy:", accuracy);
-              continue;
-            }
-          }
+  if (!shouldInsert) return;
 
-          const payload = {
-            latitude,
-            longitude,
-            accuracy,
-            speed,
-            heading,
-            altitude,
-            timestamp: new Date(loc.timestamp).toISOString().slice(0, 19).replace("T", " "),
-            type: "tracking",
-            session_id: sessionId,
-          };
+  const payload = {
+    latitude,
+    longitude,
+    accuracy,
+    timestamp: new Date(loc.timestamp)
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " "),
+    type: "tracking",
+    session_id: sessionId,
+  };
 
-          try {
-            await axios.post(`${API_BASE}/locations`, payload, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            // Guardar último punto exitoso
-            await saveLastLocation(latitude, longitude);
-            // actualizar lastLoc en memoria para el siguiente ciclo
-            if (lastLoc) {
-              lastLoc.lat = latitude;
-              lastLoc.lng = longitude;
-            }
-            console.log("📡 Punto BG enviado:", payload.timestamp, "acc:", accuracy);
-          } catch (err) {
-            console.log("❌ Error enviando punto BG:", err);
-            // no hacemos retry intensivo aquí para ahorrar batería/data
-          }
-        }
-      } catch (err) {
-        console.log("❌ Error en background task principal:", err);
-      }
-    }
-  );
+  // ✅ GUARDAR SIEMPRE
+  await enqueueLocation(payload);
+
+  // 🔁 INTENTAR ENVÍO
+  await flushQueue();
+
+  await AsyncStorage.multiSet([
+    [STORAGE_KEYS.LAST_LOC, JSON.stringify({ lat: latitude, lng: longitude })],
+    [STORAGE_KEYS.LAST_TIME, now.toString()],
+  ]);
+});
+
 }
 
+
+
 /* ----------------------------------------------------------
-   CONTEXTO
+   CONTEXT
 ---------------------------------------------------------- */
 const LocationContext = createContext<LocationContextType | null>(null);
 
 export const useLocation = () => {
   const ctx = useContext(LocationContext);
-  if (!ctx) throw new Error("useLocation debe usarse dentro de <LocationProvider>");
+  if (!ctx) throw new Error("useLocation fuera del provider");
   return ctx;
 };
+
+
 
 /* ----------------------------------------------------------
    PROVIDER
 ---------------------------------------------------------- */
 export const LocationProvider = ({ children }: { children: ReactNode }) => {
-  /* ----------------------------------------------------------
-     FUNCIONES AUXILIARES
-  ---------------------------------------------------------- */
-  const sendLocation = async (token: string, data: any) => {
-    return axios.post(`${API_BASE}/locations`, data, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+  const [gpsBlocked, setGpsBlocked] = React.useState(false);
+const startTracking = useCallback(async (token: string, type: string) => {
+  // 🔐 permisos
+  const granted = await requestPermissionsOrSettings();
+  if (!granted) return;
+const gpsOk = await isGpsWorking();
+if (!gpsOk) {
+  setGpsBlocked(true);
+  return;
+}
+
+
+
+  let loc = null;
+
+  try {
+    loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Highest,
+      timeout: 15000,
     });
+  } catch {
+    loc = await Location.getLastKnownPositionAsync();
+  }
+
+  let sessionId = await AsyncStorage.getItem(STORAGE_KEYS.SESSION);
+
+  // 🔐 LOGIN → nueva sesión
+  if (type === "login") {
+    sessionId = generateSessionId();
+    await AsyncStorage.multiSet([
+      [STORAGE_KEYS.SESSION, sessionId],
+      [STORAGE_KEYS.ACTIVE, "true"],
+      [STORAGE_KEYS.TOKEN, token],
+    ]);
+  }
+
+  const payload = {
+    latitude: loc?.coords?.latitude ?? 0,
+    longitude: loc?.coords?.longitude ?? 0,
+    accuracy: loc?.coords?.accuracy ?? 9999,
+    timestamp: loc
+      ? new Date(loc.timestamp).toISOString().slice(0, 19).replace("T", " ")
+      : new Date().toISOString().slice(0, 19).replace("T", " "),
+    type,
+    session_id: sessionId,
+  };
+  console.log("Payload inicial:", payload);
+
+  // ✅ 1. GUARDAR SIEMPRE (offline-first)
+  await enqueueLocation(payload);
+
+  // 🔁 2. INTENTAR ENVIAR
+  await flushQueue();
+
+  // ▶️ TRACKING BACKGROUND
+  if (type === "login") {
+    await startBackgroundTracking();
+  }
+
+  // ⛔ LOGOUT
+  if (type === "logout") {
+    if (Platform.OS !== "web") {
+      const registered =
+        await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+
+      if (registered) {
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      }
+    }
+
+    await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+  }
+}, []);
+
+useEffect(() => {
+  if (Platform.OS === "web") return;
+
+  const interval = setInterval(async () => {
+    const tracking =
+      (await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE)) === "true";
+
+    if (!tracking) return;
+
+    const gpsOk = await isGpsWorking();
+
+    if (!gpsOk) {
+      setGpsBlocked(true);
+    } else {
+      setGpsBlocked(false);
+    }
+  }, 3000); // 🔥 cada 2 segundos
+
+  return () => clearInterval(interval);
+}, []);
+
+useEffect(() => {
+  if (Platform.OS === "web") return;
+
+  const checkOnStartup = async () => {
+    const tracking =
+      (await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE)) === "true";
+
+    if (!tracking) return;
+
+    const gpsOk = await isGpsWorking();
+    if (!gpsOk) {
+      setGpsBlocked(true);
+    }
   };
 
-  /* ----------------------------------------------------------
-     TRACKING PUNTUAL (login, logout, formularios)
-     - No enviar si accuracy > 20
-  ---------------------------------------------------------- */
-  const startTracking = useCallback(
-    async (
-      token: string,
-      type:
-        | "login"
-        | "logout"
-        | "Acta_de_Inicio"
-        | "Formulario_Inpeccion"
-        | "Informe_de_Supervisión"
-        | "Inicio_servicio"
-        | "Novedades_servicio"
-    ) => {
-      try {
-        let latitude = 0,
-          longitude = 0,
-          accuracy = 0,
-          altitude = 0,
-          speed = 0,
-          heading = 0,
-          timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+  checkOnStartup();
+}, []);
+useEffect(() => {
+  if (Platform.OS === "web") return;
 
-        if (Platform.OS === "web") {
-          /* ------------------------------------------
-             TRACKING WEB
-          ------------------------------------------ */
-          await new Promise((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                latitude = pos.coords.latitude;
-                longitude = pos.coords.longitude;
-                accuracy = pos.coords.accuracy ?? 9999;
-                altitude = pos.coords.altitude ?? 0;
-                heading = pos.coords.heading ?? 0;
-                speed = pos.coords.speed ?? 0;
-                resolve(true);
-              },
-              (err) => {
-                console.log("⚠️ Geolocation error web:", err);
-                resolve(true); // NO BLOQUEA EL LOGIN
-              },
-              { enableHighAccuracy: true, timeout: 7000 }
-            );
-          });
-        } else {
-          /* ------------------------------------------
-             TRACKING MÓVIL (foreground instant)
-          ------------------------------------------ */
-          const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status !== "granted") throw new Error("Permiso denegado");
+  const sub = AppState.addEventListener("change", async (nextState) => {
+    if (nextState !== "active") return;
 
-          const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.BestForNavigation,
-          });
+    const tracking =
+      (await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE)) === "true";
 
-          latitude = loc.coords.latitude;
-          longitude = loc.coords.longitude;
-          accuracy = loc.coords.accuracy ?? 9999;
-          altitude = loc.coords.altitude ?? 0;
-          heading = loc.coords.heading ?? 0;
-          speed = loc.coords.speed ?? 0;
-          timestamp = new Date(loc.timestamp).toISOString().slice(0, 19).replace("T", " ");
-        }
+    if (!tracking) return;
 
-        // FILTRO: no enviar login/logout/formularios si precision > 20m
-        if (!accuracy || accuracy > 20) {
-          console.log("⛔ Punto LOGIN/FORM descartado por precisión (>20m):", accuracy);
-          return;
-        }
+    const gpsOk = await isGpsWorking();
+    setGpsBlocked(!gpsOk);
+  });
 
-        const payload = {
-          latitude,
-          longitude,
-          accuracy,
-          altitude,
-          heading,
-          speed,
-          timestamp,
-          type,
-          session_id: `${type}_${Date.now()}`,
-        };
+  return () => sub.remove();
+}, []);
 
-        try {
-          await sendLocation(token, payload);
-          // guardar último punto enviado para comparaciones futuras
-          await saveLastLocation(latitude, longitude);
-          console.log("📌 Punto enviado:", type, "acc:", accuracy);
-        } catch (err) {
-          console.log("❌ Error enviando punto puntual:", err);
-        }
-      } catch (err) {
-        console.log("❌ Error en startTracking:", err);
-      }
-    },
-    []
-  );
 
-  /* ----------------------------------------------------------
-     TRACKING EN BACKGROUND (solo móvil)
-     - Usar BestForNavigation
-     - Umbral de precision y filtros para saltos
-  ---------------------------------------------------------- */
-  const startBackgroundTracking = useCallback(
-    async (token: string, sessionId: string) => {
-      if (Platform.OS === "web") return;
 
-      try {
-        await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
-        await AsyncStorage.setItem(STORAGE_KEYS.SESSION, sessionId);
-        await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE, "true");
-      } catch (err) {
-        console.log("⚠️ Error guardando storage:", err);
-      }
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        console.log("Permiso foreground denegado");
-        return;
-      }
 
-      await Location.requestBackgroundPermissionsAsync();
 
-      const registered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
-      if (registered) await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
 
-      // Opciones más estables y eficientes
-      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 60000, // 5s
-        distanceInterval: 8, // 8m
-        // pausesUpdatesAutomatically: true, // dependiendo del caso; dejar false evita pausar en algunos dispositivos
-        showsBackgroundLocationIndicator: true,
-        foregroundService: {
-          notificationTitle: "La Vianda",
-          notificationBody: "Tracking activo",
-        },
-      });
 
-      console.log("🚀 Background tracking INICIADO (BestForNavigation, 5s/8m)");
-    },
-    []
-  );
+
+
+  const startBackgroundTracking = useCallback(async () => {
+    if (Platform.OS === "web") return;
+
+    const registered =
+      await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+    if (registered) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+    }
+
+   await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+  accuracy: Location.Accuracy.Highest,
+  timeInterval: MOVE_INTERVAL, // 🔥 FUERZA EVENTOS CADA 5s
+  distanceInterval: 0,         // Android ignora esto
+  pausesUpdatesAutomatically: false,
+  showsBackgroundLocationIndicator: true,
+  foregroundService: {
+    notificationTitle: "La Vianda",
+    notificationBody: "Tracking activo",
+  },
+});
+
+  }, []);
 
   const stopBackgroundTracking = useCallback(async () => {
-    if (Platform.OS !== "web") {
-      const registered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
-      if (registered) await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+  if (Platform.OS === "web") return;
+
+  try {
+    const registered =
+      await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+
+    if (registered) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
     }
+  } catch (e) {
+    console.log("⚠️ Error stopping task", e);
+  }
 
-    try {
-      await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
-      await AsyncStorage.removeItem(STORAGE_KEYS.SESSION);
-      await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE);
-    } catch (err) {
-      console.log("⚠️ Error limpiando storage", err);
-    }
+  await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+}, []);
 
-    console.log("🛑 Tracking detenido");
-  }, []);
 
-  const isTrackingActive = useCallback(async () => {
-    try {
-      return (await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE)) === "true";
-    } catch {
-      return false;
-    }
-  }, []);
+  const isTrackingActive = async () =>
+    (await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE)) === "true";
+  
 
-  /* ----------------------------------------------------------
-     PROVIDER RETURN
-  ---------------------------------------------------------- */
   return (
+
     <LocationContext.Provider
       value={{
         startTracking,
@@ -396,9 +471,53 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
         isTrackingActive,
       }}
     >
+      <Modal visible={gpsBlocked} transparent animationType="fade">
+  <View
+    style={{
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "center",
+      alignItems: "center",
+    }}
+  >
+    <View
+      style={{
+        width: "85%",
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        padding: 20,
+        alignItems: "center",
+      }}
+    >
+      <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 10 }}>
+        GPS desactivado
+      </Text>
+
+      <Text style={{ textAlign: "center", marginBottom: 20 }}>
+        Para continuar usando la aplicación debes activar el GPS.
+      </Text>
+
+      <TouchableOpacity
+        style={{
+          backgroundColor: "#1E3A8A",
+          paddingVertical: 12,
+          paddingHorizontal: 25,
+          borderRadius: 8,
+        }}
+        onPress={() => {
+          setGpsBlocked(false);
+        }}
+      >
+        <Text style={{ color: "#fff", fontWeight: "bold" }}>
+          Cerrar
+        </Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
+
+
       {children}
     </LocationContext.Provider>
   );
 };
-
-// --- END OF FILE ---

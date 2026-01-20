@@ -26,7 +26,7 @@ const API_BASE = 'https://operaciones.lavianda.com.co/api';
 // --- Paleta de Colores ---
 const COLORS = {
   primary: '#C62828',
-  background: '#E3F2FD',
+  background: '#FFFFFF',
   card: '#FFFFFF',
   textPrimary: '#212121',
   textSecondary: '#757575',
@@ -44,6 +44,7 @@ interface Empresa {
   identificacion?: string; // NIT o cédula
   ciudad:string;
   type:string;
+  contrato:string;
   created_at: string;
   updated_at: string;
 }
@@ -89,7 +90,9 @@ export default function OperacionesScreen() {
     centro_costo: '',
     identificacion: '',
     type:'',
-    ciudad:''
+    ciudad:'',
+    contrato:''
+
   });
 
   // Estados para registros de clientes
@@ -116,6 +119,7 @@ const [paginaEmpresa, setPaginaEmpresa] = useState(1);
 const [paginaRegistro, setPaginaRegistro] = useState(1);
 const [refreshingEmpresa, setRefreshingEmpresa] = useState(false);
 const [refreshingRegistro, setRefreshingRegistro] = useState(false);
+const { signOut } = useAuth();
 
 
   // Verificar permisos de administrador
@@ -144,20 +148,41 @@ const [refreshingRegistro, setRefreshingRegistro] = useState(false);
   };
 
   const loadEmpresas = async () => {
-    try {
-      const response = await axios.get(`${API_BASE}/empresas`, {
-        headers: { 'Authorization': `Bearer ${user?.token}` }
-      });
-      setEmpresas(response.data);
-    } catch (error) {
-      console.error('Error al cargar empresas:', error);
+  try {
+    const response = await axios.get(`${API_BASE}/empresas`, {
+      headers: { Authorization: `Bearer ${user?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' },
+    });
+
+    setEmpresas(response.data);
+
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      Alert.alert(
+        "Sesión expirada",
+        "Tu sesión ha vencido. Por favor inicia sesión nuevamente.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              signOut();
+            },
+          },
+        ]
+      );
+      return;
     }
-  };
+
+    console.error("❌ Error al cargar empresas:", error);
+  }
+};
+
 
   const loadRegistrosClientes = async () => {
     try {
       const response = await axios.get(`${API_BASE}/registros-clientes`, {
-        headers: { 'Authorization': `Bearer ${user?.token}` }
+        headers: { 'Authorization': `Bearer ${user?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' }
       });
       
       // Si el usuario es admin o root, mostrar todos los registros
@@ -252,7 +277,8 @@ const refreshRegistros = async () => {
     try {
       // Usar el endpoint correcto que acabamos de crear
       const response = await axios.get(`${API_BASE}/formularios-acta-inicio`, {
-        headers: { 'Authorization': `Bearer ${user?.token}` }
+        headers: { 'Authorization': `Bearer ${user?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' }
       });
       setFormularios(response.data);
     } catch (error) {
@@ -277,7 +303,8 @@ const refreshRegistros = async () => {
         centro_costo: empresa.centro_costo,
         identificacion: empresa.identificacion || '',
         type:empresa.type,
-        ciudad:empresa.ciudad
+        ciudad:empresa.ciudad,
+        contrato:empresa.contrato
       });
     } else {
       setEditingEmpresa(null);
@@ -286,7 +313,8 @@ const refreshRegistros = async () => {
         centro_costo: '',
         identificacion: '',
         ciudad:'',
-        type:''
+        type:'',
+        contrato:''
       });
     }
     setShowEmpresaModal(true);
@@ -494,7 +522,8 @@ const refreshRegistros = async () => {
     try {
       // Usar el endpoint correcto con filtro por registro_id
       const response = await axios.get(`${API_BASE}/formularios-acta-inicio?registro_id=${registro.id}`, {
-        headers: { 'Authorization': `Bearer ${user?.token}` }
+        headers: { 'Authorization': `Bearer ${user?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' }
       });
       
       setFormularios(Array.isArray(response.data) ? response.data : []);
@@ -604,12 +633,12 @@ ${registro.ultimo_formulario ? `Último formulario: ${formatDate(registro.ultimo
             <Ionicons name="pencil-outline" size={18} color="white" />
           </TouchableOpacity>
 
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={[styles.botonIcono, { backgroundColor: COLORS.error }]}
             onPress={() => deleteEmpresa(item)}
           >
             <Ionicons name="trash-outline" size={18} color="white" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       )}
     </View>
@@ -844,7 +873,7 @@ const registrosMostrados = registrosFiltrados.slice(
         </View>
       }
       contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 8, paddingBottom: 20, gap: 12 }}
-      ListFooterComponent={<View style={{ height: 160 }} />}
+      ListFooterComponent={<View style={{ height: 10 }} />}
     />
 
     <View style={styles.paginacionContainer}>
@@ -948,6 +977,17 @@ const registrosMostrados = registrosFiltrados.slice(
                 value={empresaForm.type}
                 onChangeText={(text) => setEmpresaForm({...empresaForm, type: text})}
                 placeholder="Ingrese Tipo de Cliente"
+                editable={!savingEmpresa}
+              />
+            </View>
+
+               <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Contrato</Text>
+              <TextInput
+                style={styles.textInput}
+                value={empresaForm.contrato}
+                onChangeText={(text) => setEmpresaForm({...empresaForm, contrato: text})}
+                placeholder="Contrato"
                 editable={!savingEmpresa}
               />
             </View>

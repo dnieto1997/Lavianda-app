@@ -10,6 +10,7 @@ import {
   ScrollView,
   TextInput,
   useWindowDimensions,
+  Alert,
   
 } from "react-native";
 import axios from "axios";
@@ -53,28 +54,50 @@ export default function DashboardScreen() {
   const [anio, setAnio] = useState(String(new Date().getFullYear()));
   const [showYearPicker, setShowYearPicker] = useState(false);
 const [yearDate, setYearDate] = useState(new Date());
+const { signOut } = useAuth();
 
   useEffect(() => {
     cargarDashboard();
   }, []);
 
-  const cargarDashboard = async () => {
-    try {
-      const [resStats, resEmpresas] = await Promise.all([
-        axios.get(`${API_URL}/dashboard/stats`, {
-          headers: { Authorization: `Bearer ${authUser?.token}` },
-        }),
-        axios.get(`${API_URL}/dashboard/empresas-stats`, {
-          headers: { Authorization: `Bearer ${authUser?.token}` },
-        }),
-      ]);
+const cargarDashboard = async () => {
+  try {
+    const [resStats, resEmpresas] = await Promise.all([
+      axios.get(`${API_URL}/dashboard/stats`, {
+        headers: { Authorization: `Bearer ${authUser?.token}` },
+      }),
+      axios.get(`${API_URL}/dashboard/empresas-stats`, {
+        headers: { Authorization: `Bearer ${authUser?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' },
+      }),
+    ]);
 
-      setSupervisores(resStats.data.supervisores || []);
-      setTotalEmpresas(resEmpresas.data.total_empresas_creadas || 0);
-    } finally {
-      setLoading(false);
+    setSupervisores(resStats.data.supervisores || []);
+    setTotalEmpresas(resEmpresas.data.total_empresas_creadas || 0);
+
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      Alert.alert(
+        "Sesión expirada",
+        "Tu sesión ha vencido. Por favor inicia sesión nuevamente.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              signOut();
+            },
+          },
+        ]
+      );
+      return;
     }
-  };
+
+    console.error("❌ Error cargando dashboard:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const cargarEmpresas = async (
   supervisorId: number,

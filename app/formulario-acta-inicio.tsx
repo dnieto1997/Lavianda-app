@@ -60,17 +60,17 @@ interface FormularioData {
   persona_encargada: string;
   correo: string;
   telefono: string;
-  
+
   // Datos del formulario (fecha y horas automáticas)
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
-  
+
   // Datos áreas y condiciones
   areas: {
     [key: string]: {
-      cumple: boolean;
-      observaciones: string;
+      cumple: boolean | null;        // ✅ true | false | null (No aplica)
+      observaciones: string | null;  // ✅ puede ser null
       fotos: {
         uri: string;      // URI local temporal
         url: string;      // URL del servidor
@@ -78,22 +78,23 @@ interface FormularioData {
       }[];
     };
   };
-  
+
   // Inventario
   inventario: InventarioItem[];
-  
+
   // Observaciones generales
   observaciones_generales: string;
-  
+
   // Firma digital
   firma_responsable?: string;
   nombre_firmante?: string;
   cedula_firmante?: string;
-  
+
   // Timestamps
   created_at?: string;
   updated_at?: string;
 }
+
 
 const AREAS_PREDEFINIDAS = [
   'CAFETERIA',
@@ -117,6 +118,19 @@ const AREAS_PREDEFINIDAS = [
   'FACHADAS',
   'AVISOS',
 ];
+
+type FotoArea = {
+  uri: string;
+  url: string;
+  ruta: string;
+};
+
+type AreaEvaluacion = {
+  cumple: boolean | null;       // ✅ aquí está la clave
+  observaciones: string | null;
+  fotos: FotoArea[];
+};
+
 
 // Función auxiliar para normalizar URLs de fotos (fuera del componente para mejor performance)
 const normalizarUrlFoto = (url: string): string => {
@@ -165,6 +179,18 @@ export default function FormularioActaInicio() {
   const esModoCrear = modo === 'crear';
   const esModoEditar = modo === 'editar';
   const puedeEditar = esModoCrear || esModoEditar;
+const initialAreas: Record<string, AreaEvaluacion> =
+  AREAS_PREDEFINIDAS.reduce((acc, area) => {
+    acc[area] = {
+      cumple: null,          // ✅ correcto
+      observaciones: null,
+      fotos: []
+    };
+    return acc;
+  }, {} as Record<string, AreaEvaluacion>);
+
+
+  
   
   // Datos iniciales automáticos con áreas predefinidas
   const [formData, setFormData] = useState<FormularioData>({
@@ -178,10 +204,7 @@ export default function FormularioActaInicio() {
     fecha: new Date().toISOString().split('T')[0],
     hora_inicio: new Date().toTimeString().slice(0, 5),
     hora_fin: '',
-    areas: AREAS_PREDEFINIDAS.reduce((acc, area) => ({
-      ...acc,
-      [area]: { cumple: false, observaciones: '', fotos: [] }
-    }), {}),
+    areas: initialAreas,
     inventario: [
       { maquinaria_equipo: '', cantidad: '', descripcion_estado: '' }
     ],
@@ -341,6 +364,9 @@ export default function FormularioActaInicio() {
     }
   };
 
+  const esNoAplica = (valor: boolean | null | undefined) =>
+  valor === null;
+
   // Función auxiliar para generar consecutivo local
   const generarConsecutivoLocal = () => {
     const fecha = new Date();
@@ -359,128 +385,136 @@ export default function FormularioActaInicio() {
   };
 
   // Función para cargar formulario existente
-  const cargarFormularioExistente = async (formularioId: string) => {
-    console.log('📖 Cargando formulario existente con ID:', formularioId);
-    
-    try {
-      // Intentar obtener token del contexto de usuario PRIMERO
-      let token = user?.token;
-      console.log('🔑 Token del contexto para cargar formulario:', token ? 'SÍ EXISTE' : 'NO EXISTE');
-      
-      // Si no hay token en el contexto, intentar AsyncStorage como fallback
-      if (!token) {
-        console.log('🔄 Intentando obtener token de AsyncStorage para cargar formulario...');
-        const storageToken = await AsyncStorage.getItem('authToken');
-        token = storageToken || undefined;
-        console.log('🔑 Token de AsyncStorage para cargar formulario:', token ? 'SÍ EXISTE' : 'NO EXISTE');
-      }
-      
-      if (token) {
-        console.log('✅ Token válido encontrado, cargando formulario...');
-        const response = await axios.get(
-          `${API_BASE}/formularios-acta-inicio/${formularioId}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-        
-        console.log('📦 Formulario cargado desde servidor:', response.data);
-        
-        if (response.data?.data) {
-          const formulario = response.data.data;
-          console.log('📋 Datos del formulario:', formulario);
-          
-          // Normalizar áreas con fotos
-          const areasNormalizadas: any = {};
-          if (formulario.areas) {
-            Object.keys(formulario.areas).forEach(areaKey => {
-              const area = formulario.areas[areaKey];
-              areasNormalizadas[areaKey] = {
-                cumple: area.cumple || false,
-                observaciones: area.observaciones || '',
-                fotos: Array.isArray(area.fotos) 
-                  ? area.fotos.map((foto: any) => {
-                      // Si la foto ya es un objeto con uri, url, ruta
-                      if (typeof foto === 'object' && foto.url) {
-                        const urlCorregida = normalizarUrlFoto(foto.url);
-                        return {
-                          ...foto,
-                          url: urlCorregida,
-                          uri: urlCorregida
-                        };
-                      }
-                      // Si es un string (URL), convertirlo a objeto
-                      if (typeof foto === 'string') {
-                        const urlCorregida = normalizarUrlFoto(foto);
-                        return {
-                          uri: urlCorregida,
-                          url: urlCorregida,
-                          ruta: urlCorregida.replace('https://operaciones.lavianda.com.co/storage/', '')
-                        };
-                      }
-                      return foto;
-                    })
-                  : []
-              };
-            });
-          } else {
-            // Si no hay áreas, crear estructura vacía
-            AREAS_PREDEFINIDAS.forEach(area => {
-              areasNormalizadas[area] = { cumple: false, observaciones: '', fotos: [] };
-            });
-          }
-          
-          // Cargar todos los datos del formulario
-          setFormData({
-            consecutivo: formulario.consecutivo || '',
-            empresa: formulario.empresa || '',
-            nit_cedula: formulario.nit_cedula || '',
-            direccion: formulario.direccion || '',
-            persona_encargada: formulario.persona_encargada || '',
-            correo: formulario.correo || '',
-            telefono: formulario.telefono || '',
-            fecha: formulario.fecha || '',
-            hora_inicio: formulario.hora_inicio || '',
-            hora_fin: formulario.hora_fin || '',
-            areas: areasNormalizadas,
-            inventario: formulario.inventario || [
-              { maquinaria_equipo: '', cantidad: '', descripcion_estado: '' }
-            ],
-            observaciones_generales: formulario.observaciones_generales || '',
-            firma_responsable: formulario.firma_responsable || '',
-            nombre_firmante: formulario.nombre_firmante || '',
-            cedula_firmante: formulario.cedula_firmante || '',
-          });
-          
-          // Si hay firma guardada, también cargarla en el estado de firma
-          if (formulario.firma_responsable) {
-            console.log('✍️ Firma encontrada en el formulario');
-            setFirmaBase64(formulario.firma_responsable);
-          }
-          
-          console.log('✅ Formulario cargado exitosamente');
-        } else {
-          console.log('❌ No se encontraron datos del formulario');
-          Alert.alert('Error', 'No se pudo cargar el formulario');
-        }
-        
-      } else {
-        console.log('❌ No se pudo obtener token para cargar formulario');
-        Alert.alert('Error', 'No se encontró token de autenticación');
-      }
-      
-    } catch (error) {
-      console.log('💥 Error cargando formulario:', error);
-      if (axios.isAxiosError(error)) {
-        console.log('📊 Status de error:', error.response?.status);
-        console.log('📋 Datos de error:', error.response?.data);
-      }
-      Alert.alert('Error', 'No se pudo cargar el formulario');
+ const cargarFormularioExistente = async (formularioId: string) => {
+  console.log('📖 Cargando formulario existente con ID:', formularioId);
+
+  try {
+    let token = user?.token;
+
+    if (!token) {
+      const storageToken = await AsyncStorage.getItem('authToken');
+      token = storageToken || undefined;
     }
-  };
+
+    if (!token) {
+      Alert.alert('Error', 'No se encontró token de autenticación');
+      return;
+    }
+
+    const response = await axios.get(
+      `${API_BASE}/formularios-acta-inicio/${formularioId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+      }
+    );
+
+    if (!response.data?.data) {
+      Alert.alert('Error', 'No se pudo cargar el formulario');
+      return;
+    }
+
+    const formulario = response.data.data;
+
+    // 🔹 NORMALIZAR ÁREAS
+    const areasNormalizadas: Record<string, any> = {};
+
+    if (formulario.areas) {
+      Object.keys(formulario.areas).forEach(areaKey => {
+        const area = formulario.areas[areaKey];
+
+        areasNormalizadas[areaKey] = {
+          cumple:
+            area.cumple === true
+              ? true
+              : area.cumple === false
+              ? false
+              : null, // 👈 null explícito = No aplica
+
+          observaciones: area.observaciones ?? null,
+
+          fotos: Array.isArray(area.fotos)
+            ? area.fotos.map((foto: any) => {
+                if (typeof foto === 'object' && foto.url) {
+                  const urlCorregida = normalizarUrlFoto(foto.url);
+                  return {
+                    ...foto,
+                    url: urlCorregida,
+                    uri: urlCorregida,
+                  };
+                }
+
+                if (typeof foto === 'string') {
+                  const urlCorregida = normalizarUrlFoto(foto);
+                  return {
+                    uri: urlCorregida,
+                    url: urlCorregida,
+                    ruta: urlCorregida.replace(
+                      'https://operaciones.lavianda.com.co/storage/',
+                      ''
+                    ),
+                  };
+                }
+
+                return foto;
+              })
+            : [],
+        };
+      });
+    }
+
+    // 🔹 ASEGURAR TODAS LAS ÁREAS
+    AREAS_PREDEFINIDAS.forEach(area => {
+      if (!areasNormalizadas[area]) {
+        areasNormalizadas[area] = {
+          cumple: null,
+          observaciones: null,
+          fotos: [],
+        };
+      }
+    });
+
+    // 🔥 CLAVE: FORZAR NUEVA REFERENCIA
+    const areasClonadas = JSON.parse(JSON.stringify(areasNormalizadas));
+
+    // 🔹 SETEAR FORMULARIO
+    setFormData({
+      consecutivo: formulario.consecutivo || '',
+      empresa: formulario.empresa || '',
+      nit_cedula: formulario.nit_cedula || '',
+      direccion: formulario.direccion || '',
+      persona_encargada: formulario.persona_encargada || '',
+      correo: formulario.correo || '',
+      telefono: formulario.telefono || '',
+      fecha: formulario.fecha || '',
+      hora_inicio: formulario.hora_inicio || '',
+      hora_fin: formulario.hora_fin || '',
+      areas: areasClonadas, // 👈 ESTO SOLUCIONA TODO
+      inventario:
+        formulario.inventario || [
+          { maquinaria_equipo: '', cantidad: '', descripcion_estado: '' },
+        ],
+      observaciones_generales: formulario.observaciones_generales || '',
+      firma_responsable: formulario.firma_responsable || '',
+      nombre_firmante: formulario.nombre_firmante || '',
+      cedula_firmante: formulario.cedula_firmante || '',
+    });
+
+    if (formulario.firma_responsable) {
+      setFirmaBase64(formulario.firma_responsable);
+    }
+
+    console.log('✅ Formulario cargado correctamente');
+  } catch (error) {
+    console.log('💥 Error cargando formulario:', error);
+    Alert.alert('Error', 'No se pudo cargar el formulario');
+  }
+};
+
+
 
   useEffect(() => {
     console.log('🚀 Iniciando formulario con parámetros:', params);
@@ -720,18 +754,23 @@ export default function FormularioActaInicio() {
     }
   };
 
-  const handleAreaChange = (area: string, field: 'cumple' | 'observaciones', value: boolean | string) => {
-    setFormData(prev => ({
-      ...prev,
-      areas: {
-        ...prev.areas,
-        [area]: {
-          ...prev.areas[area],
-          [field]: value
-        }
+ const handleAreaChange = (
+  area: string,
+  field: 'cumple' | 'observaciones',
+  value: boolean | string | null
+) => {
+  setFormData(prev => ({
+    ...prev,
+    areas: {
+      ...prev.areas,
+      [area]: {
+        ...prev.areas[area],
+        [field]: value
       }
-    }));
-  };
+    }
+  }));
+};
+
 
   // Función para solicitar permisos de cámara
   const solicitarPermisosCamara = async () => {
@@ -1082,7 +1121,7 @@ export default function FormularioActaInicio() {
           
           // ✅ Paso 2: Iniciar tracking en background REAL (producción)
           const sessionId = `session_${Date.now()}`;
-          await startBackgroundTracking(token, sessionId);
+          //await startBackgroundTracking(token, sessionId);
           console.log('🎯 Tracking en background iniciado');
 
         } catch (trackingError) {
@@ -1250,7 +1289,7 @@ export default function FormularioActaInicio() {
                 style={styles.input}
                 value={formData.telefono}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, telefono: text }))}
-                placeholder="300 123 4567"
+                placeholder="3001234567"
                 placeholderTextColor={COLORS.textSecondary}
                 keyboardType="phone-pad"
               />
@@ -1262,110 +1301,154 @@ export default function FormularioActaInicio() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>DESCRIPCION DE LAS AREAS</Text>
           <Text style={styles.sectionSubtitle}>Marque las áreas que cumplen con las condiciones requeridas</Text>
-          
-          {AREAS_PREDEFINIDAS.map((area) => (
-            <View key={area} style={styles.areaItem}>
-              <View style={styles.areaHeader}>
-                <Text style={styles.areaTitle}>{area}</Text>
-                <View style={styles.toggleContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.toggleButton,
-                      formData.areas[area]?.cumple 
-                        ? [styles.toggleButtonActive, { backgroundColor: COLORS.success }]
-                        : styles.toggleButtonInactive,
-                      esVisualizacion && styles.disabledButton
-                    ]}
-                    onPress={esVisualizacion ? undefined : () => handleAreaChange(area, 'cumple', !formData.areas[area]?.cumple)}
-                    disabled={esVisualizacion}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText,
-                      formData.areas[area]?.cumple ? styles.toggleButtonTextActive : styles.toggleButtonTextInactive
-                    ]}>
-                      {formData.areas[area]?.cumple ? 'SÍ' : 'NO'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              
-              <TextInput
-                style={styles.observacionesInput}
-                value={formData.areas[area]?.observaciones || ''}
-                onChangeText={(text) => handleAreaChange(area, 'observaciones', text)}
-                placeholder="Observaciones (opcional)"
-                placeholderTextColor={COLORS.textSecondary}
-                multiline
-                numberOfLines={2}
-                editable={!esVisualizacion}
-              />
+ {AREAS_PREDEFINIDAS.map((area) => (
+  <View key={area} style={styles.areaItem}>
 
-              {/* Botón para agregar fotos */}
-              {!esVisualizacion && (
+    {/* TÍTULO DEL ÁREA */}
+    <Text style={styles.areaTitle}>{area}</Text>
+
+    {/* ESPACIO ENTRE TÍTULO Y CHECKBOX */}
+    <View style={{ height: 8 }} />
+
+    {/* CHECKBOX SÍ / NO / NO APLICA */}
+    <View style={styles.checkboxContainer}>
+
+      {/* SÍ */}
+      <TouchableOpacity
+        style={styles.checkboxOption}
+        disabled={esVisualizacion}
+        onPress={() => handleAreaChange(area, 'cumple', true)}
+      >
+        <Ionicons
+          name={
+            formData.areas[area]?.cumple === true
+              ? 'checkbox'
+              : 'square-outline'
+          }
+          size={22}
+          color={COLORS.success}
+        />
+        <Text style={styles.checkboxLabel}>Sí</Text>
+      </TouchableOpacity>
+
+      {/* NO */}
+      <TouchableOpacity
+        style={styles.checkboxOption}
+        disabled={esVisualizacion}
+        onPress={() => handleAreaChange(area, 'cumple', false)}
+      >
+        <Ionicons
+          name={
+            formData.areas[area]?.cumple === false
+              ? 'checkbox'
+              : 'square-outline'
+          }
+          size={22}
+          color={COLORS.danger}
+        />
+        <Text style={styles.checkboxLabel}>No</Text>
+      </TouchableOpacity>
+
+      {/* NO APLICA */}
+      <TouchableOpacity
+  style={styles.checkboxOption}
+  disabled={esVisualizacion}
+  onPress={() => handleAreaChange(area, 'cumple', null)}
+>
+  <Ionicons
+    name={
+      formData.areas[area]?.cumple === null
+        ? 'checkbox'
+        : 'square-outline'
+    }
+    size={22}
+    color={COLORS.textSecondary}
+  />
+  <Text style={styles.checkboxLabel}>No aplica</Text>
+</TouchableOpacity>
+
+
+    </View>
+
+    {/* ESPACIO ENTRE CHECKBOX Y OBSERVACIONES */}
+    <View style={{ height: 10 }} />
+
+    {/* OBSERVACIONES */}
+    <TextInput
+      style={styles.observacionesInput}
+      value={formData.areas[area]?.observaciones || ''}
+      onChangeText={(text) =>
+        handleAreaChange(area, 'observaciones', text)
+      }
+      placeholder="Observaciones (opcional)"
+      placeholderTextColor={COLORS.textSecondary}
+      multiline
+      numberOfLines={2}
+      editable={!esVisualizacion}
+    />
+
+    {/* BOTÓN AGREGAR FOTO */}
+    {!esVisualizacion && (
+      <TouchableOpacity
+        style={styles.addPhotoButton}
+        onPress={() => mostrarOpcionesFoto(area)}
+      >
+        <Ionicons name="camera" size={20} color={COLORS.primary} />
+        <Text style={styles.addPhotoButtonText}>
+          Agregar foto evidencia
+        </Text>
+      </TouchableOpacity>
+    )}
+
+    {/* FOTOS */}
+    {formData.areas[area]?.fotos?.length > 0 && (
+      <View style={styles.fotosContainer}>
+        <Text style={styles.fotosLabel}>
+          📷 Fotos ({formData.areas[area].fotos.length})
+        </Text>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {formData.areas[area].fotos.map((foto, index) => {
+            const fotoUrl = normalizarUrlFoto(foto.url || foto.uri);
+            const imageKey = `${area}-${index}`;
+            const hasError = imageErrors[imageKey];
+
+            return (
+              <View key={index} style={styles.fotoItem}>
                 <TouchableOpacity
-                  style={styles.addPhotoButton}
-                  onPress={() => mostrarOpcionesFoto(area)}
+                  onPress={() => abrirFotoEnModal(fotoUrl)}
+                  disabled={hasError}
                 >
-                  <Ionicons name="camera" size={20} color={COLORS.primary} />
-                  <Text style={styles.addPhotoButtonText}>Agregar foto evidencia</Text>
+                  {hasError ? (
+                    <View style={[styles.fotoPreview, styles.fotoError as any]}>
+                      <Ionicons name="image-outline" size={40} />
+                    </View>
+                  ) : (
+                    <Image source={{ uri: fotoUrl }} style={styles.fotoPreview} />
+                  )}
                 </TouchableOpacity>
-              )}
 
-              {/* Mostrar fotos capturadas */}
-              {formData.areas[area]?.fotos && formData.areas[area].fotos.length > 0 && (
-                <View style={styles.fotosContainer}>
-                  <Text style={styles.fotosLabel}>
-                    📷 Fotos ({formData.areas[area].fotos.length})
-                  </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fotosScroll}>
-                    {formData.areas[area].fotos.map((foto, index) => {
-                      // Normalizar la URL antes de usarla
-                      const fotoUrlOriginal = foto.url || foto.uri;
-                      const fotoUrl = normalizarUrlFoto(fotoUrlOriginal);
-                      const imageKey = `${area}-${index}`;
-                      const hasError = imageErrors[imageKey];
-                      
-                      console.log('🖼️ Mostrando foto normalizada:', fotoUrl);
-                      
-                      return (
-                        <View key={index} style={styles.fotoItem}>
-                          <TouchableOpacity 
-                            onPress={() => abrirFotoEnModal(fotoUrl)}
-                            disabled={hasError}
-                          >
-                            {hasError ? (
-                              <View style={[styles.fotoPreview, styles.fotoError as any]}>
-                                <Ionicons name="image-outline" size={40} color={COLORS.textSecondary} />
-                                <Text style={styles.fotoErrorText as any}>Error</Text>
-                              </View>
-                            ) : (
-                              <Image 
-                                source={{ uri: fotoUrl }} 
-                                style={styles.fotoPreview}
-                                onError={(error) => {
-                                  console.error('❌ Error cargando imagen:', error.nativeEvent.error);
-                                  console.error('❌ URL con error:', fotoUrl);
-                                  setImageErrors(prev => ({ ...prev, [imageKey]: true }));
-                                }}
-                              />
-                            )}
-                          </TouchableOpacity>
-                          {!esVisualizacion && (
-                            <TouchableOpacity
-                              style={styles.deleteFotoButton}
-                              onPress={() => eliminarFoto(area, index)}
-                            >
-                              <Ionicons name="close-circle" size={24} color={COLORS.danger} />
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-          ))}
+                {!esVisualizacion && (
+                  <TouchableOpacity
+                    style={styles.deleteFotoButton}
+                    onPress={() => eliminarFoto(area, index)}
+                  >
+                    <Ionicons name="close-circle" size={24} color={COLORS.danger} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
+      </View>
+    )}
+
+  </View>
+))}
+
+
+
+
         </View>
 
         {/* Inventario de Maquinaria y Equipos */}
@@ -1423,7 +1506,6 @@ export default function FormularioActaInicio() {
                     style={styles.input}
                     value={item.descripcion_estado}
                     onChangeText={(text) => handleInventarioChange(index, 'descripcion_estado', text)}
-                    placeholder="Bueno, Regular, Malo"
                     placeholderTextColor={COLORS.textSecondary}
                   />
                 </View>
@@ -1448,74 +1530,74 @@ export default function FormularioActaInicio() {
         </View>
 
         {/* Sección de Firma (visible si existe firma guardada o recién capturada) */}
-       {(formData.firma_responsable || firmaBase64) && (
-  <View style={styles.section}>
-    <Text style={styles.sectionTitle}>✍️ Firma Digital</Text>
-
-    <View style={styles.firmaPreviewContainer}>
-      {(() => {
-        const data = formData.firma_responsable || firmaBase64;
-        const base64 = data.split(",")[1];
-
-        // ✅ Decodificar base64 a SVG string
-        let decodedSvg = decodeURIComponent(escape(atob(base64)));
-
-        // ✅ Asegurar viewBox correcto y más alto para que no recorte la firma
-        if (!decodedSvg.includes("viewBox")) {
-          decodedSvg = decodedSvg.replace("<svg", `<svg viewBox="0 0 344 300"`); // 👈 más alto
-        }
-
-        // ✅ Mover la firma hacia arriba dentro del SVG para quitar espacio vacío superior
-        decodedSvg = decodedSvg.replace(
-          "<path",
-          `<path transform="translate(0, -60)"` // 👈 sube la firma 60px
-        );
-
-        return (
-          <View style={styles.svgWrapper}>
-            <SvgXml
-              xml={decodedSvg}
-              width="100%"  // 👈 ocupa todo el ancho
-              height={220}  // 👈 firma grande y sin recorte
-              preserveAspectRatio="xMidYMid meet"
-            />
-          </View>
-        );
-      })()}
-
-      {/* INFO DEL FIRMANTE */}
-      <View style={styles.firmaInfoContainer}>
-        {(formData.nombre_firmante || user?.name) && (
-          <Text style={styles.firmaInfo}>
-            <Text style={styles.firmaInfoLabel}>Firmante: </Text>
-            {formData.nombre_firmante || user?.name}
-          </Text>
-        )}
-
-        {(formData.cedula_firmante || user?.cedula) && (
-          <Text style={styles.firmaInfo}>
-            <Text style={styles.firmaInfoLabel}>Cédula: </Text>
-            {formData.cedula_firmante || user?.cedula}
-          </Text>
-        )}
-
-        {formData.created_at && (
-          <Text style={styles.firmaInfo}>
-            <Text style={styles.firmaInfoLabel}>Fecha de firma: </Text>
-            {new Date(formData.created_at).toLocaleDateString("es-CO", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Text>
-        )}
+  {(formData.firma_responsable || firmaBase64) && (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>✍️ Firma Digital</Text>
+  
+      <View style={styles.firmaPreviewContainer}>
+        {(() => {
+          const data = formData.firma_responsable || firmaBase64;
+          const base64 = data.split(",")[1];
+  
+          // ✅ Decodificar base64 a SVG string
+          let decodedSvg = decodeURIComponent(escape(atob(base64)));
+  
+          // ✅ Asegurar viewBox correcto y más alto para que no recorte la firma
+          if (!decodedSvg.includes("viewBox")) {
+            decodedSvg = decodedSvg.replace("<svg", `<svg viewBox="0 0 344 300"`); // 👈 más alto
+          }
+  
+          // ✅ Mover la firma hacia arriba dentro del SVG para quitar espacio vacío superior
+          decodedSvg = decodedSvg.replace(
+            "<path",
+            `<path transform="translate(0, -60)"` // 👈 sube la firma 60px
+          );
+  
+          return (
+            <View style={styles.svgWrapper}>
+              <SvgXml
+                xml={decodedSvg}
+                width="100%"  // 👈 ocupa todo el ancho
+                height={220}  // 👈 firma grande y sin recorte
+                preserveAspectRatio="xMidYMid meet"
+              />
+            </View>
+          );
+        })()}
+  
+        {/* INFO DEL FIRMANTE */}
+        <View style={styles.firmaInfoContainer}>
+          {(formData.nombre_firmante || user?.name) && (
+            <Text style={styles.firmaInfo}>
+              <Text style={styles.firmaInfoLabel}>Firmante: </Text>
+              {formData.nombre_firmante || user?.name}
+            </Text>
+          )}
+  
+          {(formData.cedula_firmante || user?.cedula) && (
+            <Text style={styles.firmaInfo}>
+              <Text style={styles.firmaInfoLabel}>Cédula: </Text>
+              {formData.cedula_firmante || user?.cedula}
+            </Text>
+          )}
+  
+          {formData.created_at && (
+            <Text style={styles.firmaInfo}>
+              <Text style={styles.firmaInfoLabel}>Fecha de firma: </Text>
+              {new Date(formData.created_at).toLocaleDateString("es-CO", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          )}
+        </View>
       </View>
     </View>
-  </View>
-)}
-
+  )}
+  
 
         {/* Botones de acción */}
         {esVisualizacion ? (
@@ -1706,6 +1788,24 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     flexWrap: 'wrap',
   },
+  checkboxContainer: {
+   flexDirection: 'row', 
+  flexWrap: 'wrap',
+  marginBottom: 12, 
+  gap:16
+},
+
+checkboxOption: {
+  flexDirection: 'row',
+  alignItems: 'center',
+},
+
+checkboxLabel: {
+  fontSize: 14,
+  fontWeight: '500',
+  color: COLORS.textPrimary,
+},
+
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
@@ -1774,6 +1874,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.textPrimary,
     flex: 1,
+    marginBottom: 8,
   },
   toggleContainer: {
     marginLeft: 12,

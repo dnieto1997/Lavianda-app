@@ -19,7 +19,7 @@ import { SvgXml } from 'react-native-svg';
 const API_BASE = 'https://operaciones.lavianda.com.co/api';
 
 const COLORS = {
-  primary: '#2196F3',
+  primary: '#1E3A8A',
   success: '#4CAF50',
   warning: '#FF9800',
   error: '#F44336',
@@ -77,10 +77,7 @@ export default function InspeccionDetalle() {
 const firmaHeight = (firmaWidth * 150) / 300; // mantiene proporción original
 
   useEffect(() => {
-    console.log('🔍 [InspeccionDetalle] useEffect ejecutado');
-    console.log('🔍 ID:', id);
-    console.log('🔍 User:', user ? 'SÍ' : 'NO');
-    console.log('🔍 Token:', user?.token ? `SÍ (${user.token.substring(0, 20)}...)` : 'NO');
+   
     
     if (id && user?.token) {
       console.log('✅ Condiciones cumplidas, cargando inspección...');
@@ -108,7 +105,7 @@ const firmaHeight = (firmaWidth * 150) / 300; // mantiene proporción original
       console.log('🔍 Cargando inspección ID:', id);
 
       const url = `${API_BASE}/formularios/inspeccion/${id}`;
-      console.log('🌐 Haciendo petición a:', url);
+
       
       const response = await axios.get(url, {
         headers: { 
@@ -195,11 +192,8 @@ const firmaHeight = (firmaWidth * 150) / 300; // mantiene proporción original
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Cargando inspección...</Text>
-        <Text style={styles.loadingSubtext}>ID: {id || 'No disponible'}</Text>
-        <Text style={styles.loadingSubtext}>
-          {user?.token ? 'Token: Disponible' : 'Token: No disponible'}
-        </Text>
+        <Text style={styles.loadingText}>Cargando Informe de Supervision...</Text>
+       
       </View>
     );
   }
@@ -222,12 +216,12 @@ const firmaHeight = (firmaWidth * 150) / 300; // mantiene proporción original
         <TouchableOpacity onPress={() => router.back()} style={styles.backIcon}>
           <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Inspección Detalle</Text>
+        <Text style={styles.headerTitle}>Informe de Supervision</Text>
       </View>
 
       {/* Información General */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>INFORME DE SUPERVISIÓN COMPLETO</Text>
+        <Text style={styles.cardTitle}>INFORME DE SUPERVISIÓN </Text>
         
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Consecutivo:</Text>
@@ -459,12 +453,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   backButtonText: {
-    color: COLORS.card,
+    color: "white",
     fontSize: 16,
     fontWeight: '600',
   },
   header: {
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.primary,
     padding: 16,
     paddingTop: 60,
     flexDirection: 'row',
@@ -479,12 +473,14 @@ const styles = StyleSheet.create({
   },
   backIcon: {
     marginRight: 16,
+    color: "white",
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: COLORS.textPrimary,
+    color: "white",
     flex: 1,
+    textAlign: 'center',
   },
   card: {
     backgroundColor: COLORS.card,

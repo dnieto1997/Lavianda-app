@@ -14,7 +14,7 @@ import axios from 'axios';
 // --- Configuración ---
 const API_BASE = 'https://operaciones.lavianda.com.co/api';
 const COLORS = {
-  primary: '#C62828', background: '#E3F2FD', card: '#FFFFFF',
+  primary: '#C62828', background: '#FFFFFF', card: '#FFFFFF',
   textPrimary: '#212121', textSecondary: '#757575', success: '#4CAF50', border: '#E0E0E0',
 };
 
@@ -53,7 +53,8 @@ export default function ProfileScreen() {
   const refreshUserData = async () => {
     if (!user?.token) return;
     try {
-      const response = await axios.get(`${API_BASE}/user`, { headers: { 'Authorization': `Bearer ${user.token}` } });
+      const response = await axios.get(`${API_BASE}/user`, { headers: { 'Authorization': `Bearer ${user.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' } });
       if (response.data && user) signIn(response.data, user.token);
     } catch (error) { console.error("No se pudo refrescar los datos del usuario", error); }
   };
@@ -292,7 +293,7 @@ const styles = StyleSheet.create({
   roleBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 15, alignSelf: 'flex-start' },
   roleText: { color: COLORS.card, fontSize: 12, fontWeight: 'bold' },
   actionsSection: { flexDirection: 'row', justifyContent: 'space-around', width: '100%' },
-  editButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E3F2FD', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8 },
+  editButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8 },
   editButtonText: { color: COLORS.primary, fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
   logoutButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.primary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, minWidth: 120, justifyContent: 'center' },
   logoutButtonText: { color: COLORS.card, fontSize: 16, fontWeight: 'bold', marginLeft: 8 },

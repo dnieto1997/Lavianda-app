@@ -806,7 +806,7 @@ const exportarPDF = async () => {
           
           // ✅ Paso 2: Iniciar tracking en background REAL (producción)
           const sessionId = `session_${Date.now()}`;
-          await startBackgroundTracking(token, sessionId);
+          //await startBackgroundTracking(token, sessionId);
           console.log('🎯 Tracking en background iniciado');
 
         } catch (trackingError) {

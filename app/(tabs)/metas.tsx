@@ -52,23 +52,44 @@ const insets = useSafeAreaInsets();
   const [nextMesIndex, setNextMesIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [empresaSearch, setEmpresaSearch] = useState("");
+  const { signOut } = useAuth();
 
   useEffect(() => {
     cargarEmpleados();
   }, []);
 
-  const cargarEmpleados = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/user/empleados`, {
-        headers: { Authorization: `Bearer ${authUser?.token}` },
-      });
-      setEmpleados(res.data.empleados || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+const cargarEmpleados = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/user/empleados`, {
+      headers: { Authorization: `Bearer ${authUser?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' },
+    });
+
+    setEmpleados(res.data.empleados || []);
+
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      Alert.alert(
+        "Sesión expirada",
+        "Tu sesión ha vencido. Por favor inicia sesión nuevamente.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              signOut();
+            },
+          },
+        ]
+      );
+      return;
     }
-  };
+
+    console.error("❌ Error cargando empleados:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const getNombreMes = (mes: string | number) => {
   const mesNormalizado = String(mes).padStart(2, "0"); // 🔥 CLAVE
@@ -80,7 +101,8 @@ const insets = useSafeAreaInsets();
     try {
       const res = await axios.get(
         `${API_URL}/metas/${userId}/${empresaId}?anio=${anio}`,{
-        headers: { Authorization: `Bearer ${authUser?.token}` },
+        headers: { Authorization: `Bearer ${authUser?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' },
       }
       );
 

@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { getEcho } from '../services/echo';
+import { useState, useEffect, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import { getEcho } from "../services/echo";
 
-// --- TIPOS ---
+/* ----------------------------------------------------------
+   TIPOS
+---------------------------------------------------------- */
+
 interface UserLocation {
   id: number;
   name: string;
@@ -17,7 +20,15 @@ interface UserLocation {
   lastActivity: string;
 }
 
-type LocationType = 'login' | 'tracking' | 'logout' | 'form_start' | 'form_end';
+type LocationType =
+  | "login"
+  | "tracking"
+  | "logout"
+  | "Acta_de_Inicio"
+  | "Formulario_Inpeccion"
+  | "Informe_de_Supervisión"
+  | "Inicio_servicio"
+  | "Novedades_servicio";
 
 interface LocationPoint {
   latitude: number;
@@ -25,8 +36,7 @@ interface LocationPoint {
   timestamp: string;
   type: LocationType;
   formId?: number | null;
-  sessionId:any
-  
+  sessionId: string;
 }
 
 interface SessionRoute {
@@ -48,12 +58,12 @@ interface FormMarker {
   empresa: string;
   timestamp: string;
   userName: string;
-  type: 'form_start' | 'form_end';
+  type: LocationType;
 }
 
 interface TrackingDataResponse {
   success: boolean;
-  data: LocationPoint[];
+  data: any[];
 }
 
 interface UseRealTimeTrackingReturn {
@@ -71,8 +81,15 @@ interface UseRealTimeTrackingReturn {
   startLiveTracking: (userId: number) => Promise<void>;
 }
 
-// --- CONFIG ---
-const API_BASE = 'https://operaciones.lavianda.com.co/api';
+/* ----------------------------------------------------------
+   CONFIG
+---------------------------------------------------------- */
+
+const API_BASE = "https://operaciones.lavianda.com.co/api";
+
+/* ----------------------------------------------------------
+   HOOK
+---------------------------------------------------------- */
 
 export const useRealTimeTracking = (): UseRealTimeTrackingReturn => {
   const [userLocations, setUserLocations] = useState<UserLocation[]>([]);
@@ -83,85 +100,109 @@ export const useRealTimeTracking = (): UseRealTimeTrackingReturn => {
   const [isConnected, setIsConnected] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
-  // --- TOKEN ---
-  const initToken = useCallback(async () => {
-    if (!token) {
-      const storedToken = await AsyncStorage.getItem('authToken');
+  /* ----------------------------------------------------------
+     TOKEN (FIX DEFINITIVO)
+  ---------------------------------------------------------- */
+
+  const initToken = useCallback(async (): Promise<string | null> => {
+    if (token) return token;
+
+    const storedToken = await AsyncStorage.getItem("authToken");
+    if (storedToken) {
       setToken(storedToken);
+      return storedToken;
     }
+
+    return null;
   }, [token]);
 
-  // --- API CALLS ---
+  /* ----------------------------------------------------------
+     API
+  ---------------------------------------------------------- */
+
   const fetchActiveUsers = useCallback(async () => {
-    await initToken();
-    if (!token) return;
+    const authToken = await initToken();
+    if (!authToken) return;
 
     try {
-      const { data } = await axios.get(`${API_BASE}/admin/active-users-locations`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const { data } = await axios.get(
+        `${API_BASE}/admin/active-users-locations`,
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+
       if (data?.success) setUserLocations(data.users || []);
-    } catch (err) {
-      console.error('❌ fetchActiveUsers', err);
+    } catch (e) {
+      console.error("fetchActiveUsers", e);
     }
-  }, [token, initToken]);
+  }, [initToken]);
 
   const fetchSessionRoutes = useCallback(async () => {
-    await initToken();
-    if (!token) return;
+    const authToken = await initToken();
+    if (!authToken) return;
 
     try {
-      const { data } = await axios.get(`${API_BASE}/admin/tracking/active-sessions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (data?.success) setSessionRoutes(data.sessions || []);
-    } catch (err) {
-      console.error('❌ fetchSessionRoutes', err);
-    }
-  }, [token, initToken]);
-
-  const fetchFormMarkers = useCallback(async (userId: number, date: string) => {
-    await initToken();
-    if (!token) return;
-
-    try {
-      const { data } = await axios.get(`${API_BASE}/admin/forms-locations?user_id=${userId}&date=${date}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (data?.success) setFormMarkers(data.forms || []);
-    } catch (err) {
-      console.error('❌ fetchFormMarkers', err);
-    }
-  }, [token, initToken]);
-
-  const fetchUserLocationsByDate = useCallback(async (userId: number, date: string) => {
-    await initToken();
-    if (!token) return;
-
-    try {
-      const { data } = await axios.get<TrackingDataResponse>(
-        `${API_BASE}/locations?user_id=${userId}&date=${date}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const { data } = await axios.get(
+        `${API_BASE}/admin/tracking/active-sessions`,
+        { headers: { Authorization: `Bearer ${authToken}` } }
       );
-      if (data?.success) {
-       
-        const points: LocationPoint[] = data.data.map(item => ({
-          latitude: item.latitude,
-          longitude: item.longitude,
-          timestamp: item.timestamp,
-          type: item.type,
-          formId: item.formId ?? null,
-          sessionId:item.sessionId
-        }));
-        setSelectedUserRoute(points);
-      } else {
+
+      if (data?.success) setSessionRoutes(data.sessions || []);
+    } catch (e) {
+      console.error("fetchSessionRoutes", e);
+    }
+  }, [initToken]);
+
+  const fetchFormMarkers = useCallback(
+    async (userId: number, date: string) => {
+      const authToken = await initToken();
+      if (!authToken) return;
+
+      try {
+        const { data } = await axios.get(
+          `${API_BASE}/admin/forms-locations?user_id=${userId}&date=${date}`,
+          { headers: { Authorization: `Bearer ${authToken}` } }
+        );
+
+        if (data?.success) setFormMarkers(data.forms || []);
+      } catch (e) {
+        console.error("fetchFormMarkers", e);
+      }
+    },
+    [initToken]
+  );
+
+  const fetchUserLocationsByDate = useCallback(
+    async (userId: number, date: string) => {
+      const authToken = await initToken();
+      if (!authToken) return;
+
+      try {
+        const { data } = await axios.get<TrackingDataResponse>(
+          `${API_BASE}/locations?user_id=${userId}&date=${date}`,
+          { headers: { Authorization: `Bearer ${authToken}` } }
+        );
+
+        if (data?.success) {
+          setSelectedUserRoute(
+            data.data.map(p => ({
+              latitude: Number(p.latitude),
+              longitude: Number(p.longitude),
+              timestamp: p.timestamp,
+              type: p.type as LocationType,
+              formId: p.formId ?? null,
+              sessionId: p.sessionId,
+            }))
+          );
+        } else {
+          setSelectedUserRoute([]);
+        }
+      } catch (e) {
+        console.error("fetchUserLocationsByDate", e);
         setSelectedUserRoute([]);
       }
-    } catch (err) {
-      console.error('❌ fetchUserLocationsByDate', err);
-      setSelectedUserRoute([]);
-    }
-  }, [token, initToken]);
+    },
+    [initToken]
+  );
 
   const refreshData = useCallback(async () => {
     setLoading(true);
@@ -172,20 +213,23 @@ export const useRealTimeTracking = (): UseRealTimeTrackingReturn => {
     }
   }, [fetchActiveUsers, fetchSessionRoutes]);
 
-  // --- WEBSOCKET ---
+  /* ----------------------------------------------------------
+     WEBSOCKET
+  ---------------------------------------------------------- */
+
   const connectWebSocket = useCallback(async () => {
-    await initToken();
-    if (!token) return;
+    const authToken = await initToken();
+    if (!authToken) return;
 
     try {
       const echo = await getEcho();
       if (!echo) return;
 
-      const trackingChannel = echo.channel('tracking');
-      trackingChannel.listen('.location.updated', (data: any) => {
+      echo.channel("tracking").listen(".location.updated", (data: any) => {
         setUserLocations(prev => {
           const idx = prev.findIndex(u => u.id === data.userId);
-          const updatedUser: UserLocation = {
+
+          const updated: UserLocation = {
             id: data.userId,
             name: data.userName,
             latitude: data.latitude,
@@ -197,54 +241,26 @@ export const useRealTimeTracking = (): UseRealTimeTrackingReturn => {
             isOnline: true,
             lastActivity: data.timestamp,
           };
-          return idx >= 0
-            ? prev.map(u => (u.id === data.userId ? updatedUser : u))
-            : [...prev, updatedUser];
-        });
 
-        // --- actualizar ruta activa ---
-        setSessionRoutes(prev => {
-          let session = prev.find(s => s.userId === data.userId && s.isActive);
-          if (!session) {
-            session = {
-              id: data.sessionId || `${data.userId}_${Date.now()}`,
-              userId: data.userId,
-              userName: data.userName,
-              startTime: data.timestamp,
-              points: [],
-              isActive: true,
-              totalDistance: 0,
-            };
-            prev.push(session);
-          }
-          session.points.push({
-            latitude: data.latitude,
-            longitude: data.longitude,
-            timestamp: data.timestamp,
-            type: 'tracking',
-            sessionId:data.sessionId
-          });
-          return [...prev];
+          return idx >= 0
+            ? prev.map(u => (u.id === data.userId ? updated : u))
+            : [...prev, updated];
         });
       });
 
       setIsConnected(true);
-      console.log('✅ WebSocket conectado');
-    } catch (err) {
-      console.error('❌ connectWebSocket', err);
+    } catch (e) {
+      console.error("connectWebSocket", e);
       setIsConnected(false);
     }
-  }, [token, initToken]);
+  }, [initToken]);
 
   const disconnectWebSocket = useCallback(async () => {
     try {
       const echo = await getEcho();
-      echo?.leave('tracking');
+      echo?.leave("tracking");
       setIsConnected(false);
-      console.log('📡 WebSocket desconectado');
-    } catch (err) {
-      console.error('❌ disconnectWebSocket', err);
-    }
+    } catch {}
   }, []);
 
   const startLiveTracking = useCallback(async (userId: number) => {
@@ -252,41 +268,36 @@ export const useRealTimeTracking = (): UseRealTimeTrackingReturn => {
     if (!echo) return;
 
     echo.leave(`user.${userId}`);
-    const channel = echo.channel(`user.${userId}`);
-    channel.listen('.location.updated', (data: any) => {
-      const newPoint: LocationPoint = {
-        latitude: data.latitude,
-        longitude: data.longitude,
-        timestamp: data.timestamp || new Date().toISOString(),
-        type: 'tracking',
-        sessionId:data.sessionId
-      };
-
-      setSelectedUserRoute(prev => [...prev, newPoint]);
-
-      setUserLocations(prev =>
-        prev.map(u =>
-          u.id === userId
-            ? { ...u, latitude: data.latitude, longitude: data.longitude, lastActivity: newPoint.timestamp, isOnline: true }
-            : u
-        )
-      );
+    echo.channel(`user.${userId}`).listen(".location.updated", (data: any) => {
+      setSelectedUserRoute(prev => [
+        ...prev,
+        {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          timestamp: data.timestamp,
+          type: "tracking",
+          sessionId: data.sessionId,
+        },
+      ]);
     });
   }, []);
 
-  // --- EFECTOS ---
-useEffect(() => {
-  const init = async () => {
-    await refreshData();
-    await connectWebSocket();
-  };
+  /* ----------------------------------------------------------
+     INIT
+  ---------------------------------------------------------- */
 
-  init();
+  useEffect(() => {
+    refreshData();
+    connectWebSocket();
 
-  return () => {
-    disconnectWebSocket();
-  };
-}, [refreshData, connectWebSocket, disconnectWebSocket]);
+    return () => {
+      disconnectWebSocket();
+    };
+  }, []);
+
+  /* ----------------------------------------------------------
+     RETURN
+  ---------------------------------------------------------- */
 
   return {
     userLocations,

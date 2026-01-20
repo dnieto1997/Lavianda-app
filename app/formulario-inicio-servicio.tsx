@@ -315,6 +315,8 @@ const [showFechaLimite, setShowFechaLimite] = useState(false);
               headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
+                
+            'Accept': 'application/json'
               },
             }
           );
@@ -390,6 +392,7 @@ const [showFechaLimite, setShowFechaLimite] = useState(false);
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+            'Accept': 'application/json'
         },
       });
 
@@ -453,6 +456,7 @@ const [showFechaLimite, setShowFechaLimite] = useState(false);
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
+            'Accept': 'application/json'
             },
           }
         );
@@ -1107,7 +1111,7 @@ if (!formData.telefono.trim()) {
           
           // ✅ Paso 2: Iniciar tracking en background REAL (producción)
           const sessionId = `session_${Date.now()}`;
-          await startBackgroundTracking(token, sessionId);
+          //await startBackgroundTracking(token, sessionId);
           console.log('🎯 Tracking en background iniciado');
 
         } catch (trackingError) {

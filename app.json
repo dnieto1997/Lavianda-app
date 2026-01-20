@@ -44,7 +44,8 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "package": "com.fabricciodev_21.operacioneslaviandaapp",
       "config": {
@@ -76,9 +77,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6a25df89-ba7f-4f47-9eb8-7968aeb0a825"
+        "projectId": "e5fc7c56-a290-4da8-9f1e-bff71dfbf20d"
       }
     },
-    "owner": "lavianda"
+    "owner": "soportela"
   }
 }

@@ -407,7 +407,7 @@ export const useLocationTracking = (token: string | null, isActive: boolean = fa
         console.log('📍 Iniciando seguimiento GPS...');
 
         // Iniciar tracking en segundo plano
-        await startBackgroundTracking();
+        //await startBackgroundTracking();
 
         // Configurar el seguimiento de primer plano
         locationSubscription.current = await Location.watchPositionAsync(

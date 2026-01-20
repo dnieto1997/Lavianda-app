@@ -32,7 +32,7 @@ const API_BASE = "https://operaciones.lavianda.com.co/api"
 // --- Paleta de Colores ---
 const COLORS = {
   primary: "#C62828",
-  background: "#E3F2FD",
+  background: "#FFFFFF",
   card: "#FFFFFF",
   textPrimary: "#212121",
   textSecondary: "#757575",
@@ -59,6 +59,7 @@ export default function AdminUsersScreen() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const { signOut } = useAuth();
 
   // Estados para el formulario de nuevo usuario
   const [newUser, setNewUser] = useState({
@@ -81,62 +82,68 @@ export default function AdminUsersScreen() {
     loadUsers()
   }, [])
 
-  const loadUsers = async () => {
-    try {
-      setLoading(true)
+const loadUsers = async () => {
+  try {
+    setLoading(true)
 
-      console.log("🔍 Cargando usuarios...")
-      console.log("🔑 Token:", user?.token ? "Presente" : "NO PRESENTE")
-      console.log("👤 Usuario actual:", user)
+    const response = await axios.get(`${API_BASE}/admin/users`, {
+      headers: {
+        Authorization: `Bearer ${user?.token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      timeout: 15000,
+    })
 
-      const response = await axios.get(`${API_BASE}/admin/users`, {
-        headers: {
-          Authorization: `Bearer ${user?.token}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        timeout: 15000, // Aumentado a 15 segundos
-      })
+    console.log("✅ Respuesta usuarios:", response.data)
 
-      console.log("✅ Respuesta usuarios:", response.data)
+    if (response.data.success) {
+      setUsers(response.data.data || [])
+    } else {
+      throw new Error("Error al cargar usuarios")
+    }
 
-      if (response.data.success) {
-        setUsers(response.data.data || [])
-      } else {
-        throw new Error("Error al cargar usuarios")
-      }
-    } catch (error) {
-      console.error("❌ Error al cargar usuarios:", error)
+  } catch (error) {
+    console.error("❌ Error al cargar usuarios:", error)
 
-      if (axios.isAxiosError(error)) {
-        console.error("❌ Status:", error.response?.status)
-        console.error("❌ Data:", error.response?.data)
-        console.error("❌ Headers:", error.response?.headers)
+    if (axios.isAxiosError(error)) {
+      console.error("❌ Status:", error.response?.status)
+      console.error("❌ Data:", error.response?.data)
+      console.error("❌ Headers:", error.response?.headers)
 
-        if (error.response?.status === 401) {
-          Alert.alert("Sesión expirada", "Tu sesión ha expirado. Por favor, inicia sesión nuevamente.", [
+      if (error.response?.status === 401) {
+        Alert.alert(
+          "Sesión expirada",
+          "Tu sesión ha expirado. Por favor, inicia sesión nuevamente.",
+          [
             {
               text: "OK",
               onPress: () => {
-                /* Aquí puedes agregar logout */
+                signOut()
               },
             },
-          ])
-        } else if (error.response?.status === 404) {
-          console.warn("⚠️ Endpoint /api/admin/users no encontrado")
-          Alert.alert(
-            "Endpoint no encontrado",
-            "El servidor no tiene configurado el endpoint para listar usuarios.\n\nContacta al administrador del sistema.",
-          )
-        } else {
-          const errorMessage = error.response?.data?.message || "Error al cargar usuarios"
-          Alert.alert("Error", errorMessage)
-        }
+          ]
+        )
+        return
       }
-    } finally {
-      setLoading(false)
+
+      if (error.response?.status === 404) {
+        console.warn("⚠️ Endpoint /api/admin/users no encontrado")
+        Alert.alert(
+          "Endpoint no encontrado",
+          "El servidor no tiene configurado el endpoint para listar usuarios.\n\nContacta al administrador del sistema."
+        )
+        return
+      }
+
+      const errorMessage = error.response?.data?.message || "Error al cargar usuarios"
+      Alert.alert("Error", errorMessage)
     }
+  } finally {
+    setLoading(false)
   }
+}
+
 
   const createUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.password) {

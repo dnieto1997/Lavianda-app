@@ -32,7 +32,7 @@ const COLORS = {
 };
 
 type CalificacionType = 'excelente' | 'muy_bueno' | 'bueno' | 'regular' | 'malo' | null;
-type TipoServicioType = 'mantenimiento' | 'otro' | null;
+type ServicioType = 'generales' | 'mantenimiento' | 'otro';
 
 export default function FormularioEvaluacionServicio() {
   const { registroId,empresaId,empresaNombre, ciudad: CiudadParamas } = useLocalSearchParams();
@@ -40,8 +40,8 @@ export default function FormularioEvaluacionServicio() {
 
   // Estados del formulario
   const [loading, setLoading] = useState(false);
-  const [tipoServicio, setTipoServicio] = useState<TipoServicioType>(null);
-  const [otroServicio, setOtroServicio] = useState('');
+ const [serviciosSeleccionados, setServiciosSeleccionados] = useState<ServicioType[]>([]);
+const [otroServicio, setOtroServicio] = useState('');
   const [clienteZona, setClienteZona] = useState('');
   const [telefono, setTelefono] = useState('');
   const [direccion, setDireccion] = useState('');
@@ -103,60 +103,79 @@ export default function FormularioEvaluacionServicio() {
     signatureRef.current?.clear();
   };
 
-  const validarFormulario = (): boolean => {
-    if (!tipoServicio) {
-      Alert.alert('Error', 'Por favor selecciona el tipo de servicio');
-      return false;
-    }
-    if (tipoServicio === 'otro' && !otroServicio.trim()) {
-      Alert.alert('Error', 'Por favor especifica el tipo de servicio');
-      return false;
-    }
-    if (!clienteZona.trim()) {
-      Alert.alert('Error', 'Por favor ingresa el cliente/zona');
-      return false;
-    }
-    if (!telefono.trim()) {
-      Alert.alert('Error', 'Por favor ingresa el teléfono');
-      return false;
-    }
-    if (!direccion.trim()) {
-      Alert.alert('Error', 'Por favor ingresa la dirección');
-      return false;
-    }
-    if (!ciudad.trim()) {
-      Alert.alert('Error', 'Por favor ingresa la ciudad');
-      return false;
-    }
-    if (!periodoEvaluar.trim()) {
-      Alert.alert('Error', 'Por favor ingresa el período a evaluar');
-      return false;
-    }
-    if (!evaluador.trim()) {
-      Alert.alert('Error', 'Por favor ingresa el nombre del evaluador');
-      return false;
-    }
-    if (!calificacion) {
-      Alert.alert('Error', 'Por favor selecciona una calificación');
-      return false;
-    }
-    if (!firmaClienteBase64) {
-      Alert.alert('Error', 'Por favor capture la firma del cliente');
-      return false;
-    }
-    
-    // Validar tamaño de la firma antes del envío (SVG debería ser mucho más pequeño)
-    const firmaSize = firmaClienteBase64.length;
-    const firmaSizeKB = firmaSize / 1024;
-    console.log('📏 Tamaño de firma a enviar:', firmaSizeKB.toFixed(2), 'KB');
-    
-    if (firmaSizeKB > 100) {
-      Alert.alert('Error', 'La firma es demasiado grande. Por favor capture una firma más simple.');
-      return false;
-    }
-    
-    return true;
-  };
+const validarFormulario = (): boolean => {
+  if (serviciosSeleccionados.length === 0) {
+    Alert.alert('Error', 'Por favor selecciona al menos un tipo de servicio');
+    return false;
+  }
+
+  if (
+    serviciosSeleccionados.includes('otro') &&
+    !otroServicio.trim()
+  ) {
+    Alert.alert('Error', 'Por favor especifica el servicio seleccionado en "Otro"');
+    return false;
+  }
+
+  if (!clienteZona.trim()) {
+    Alert.alert('Error', 'Por favor ingresa el cliente/zona');
+    return false;
+  }
+
+  if (!telefono.trim()) {
+    Alert.alert('Error', 'Por favor ingresa el teléfono');
+    return false;
+  }
+
+  if (!direccion.trim()) {
+    Alert.alert('Error', 'Por favor ingresa la dirección');
+    return false;
+  }
+
+
+  if (!periodoEvaluar.trim()) {
+    Alert.alert('Error', 'Por favor ingresa el período a evaluar');
+    return false;
+  }
+
+  if (!evaluador.trim()) {
+    Alert.alert('Error', 'Por favor ingresa el nombre del evaluador');
+    return false;
+  }
+
+  if (!calificacion) {
+    Alert.alert('Error', 'Por favor selecciona una calificación');
+    return false;
+  }
+
+  if (!firmaClienteBase64) {
+    Alert.alert('Error', 'Por favor capture la firma del cliente');
+    return false;
+  }
+
+  // Validar tamaño de la firma
+  const firmaSizeKB = firmaClienteBase64.length / 1024;
+  console.log('📏 Tamaño de firma a enviar:', firmaSizeKB.toFixed(2), 'KB');
+
+  if (firmaSizeKB > 100) {
+    Alert.alert(
+      'Error',
+      'La firma es demasiado grande. Por favor capture una firma más simple.'
+    );
+    return false;
+  }
+
+  return true;
+};
+
+
+const toggleServicio = (servicio: ServicioType) => {
+  setServiciosSeleccionados(prev =>
+    prev.includes(servicio)
+      ? prev.filter(s => s !== servicio)
+      : [...prev, servicio]
+  );
+};
 
   const enviarFormulario = async () => {
     if (!validarFormulario()) return;
@@ -170,50 +189,47 @@ export default function FormularioEvaluacionServicio() {
       const day = String(today.getDate()).padStart(2, '0');
       const fechaActual = `${year}-${month}-${day}`;
       
-      const data = {
-        registro_cliente_id: parseInt(registroId as string),
-        fecha_evaluacion: fechaActual,
-        
-        // Datos del cliente
-        cliente_zona: clienteZona.trim(),
-        direccion: direccion.trim(),
-        telefono: telefono.trim(),
-        ciudad: ciudad.trim(),
-        
-        // Período - enviamos null para fechas y el texto a observaciones
-        periodo_inicio: null,
-        periodo_fin: null,
-        
-        // Evaluador
-        nombre_evaluador: evaluador.trim(),
-        cargo_evaluador: 'Cliente', // Valor por defecto
-        
-        // Supervisor
-        supervisor_asignado: supervisorAsignado.trim() || null,
-        
-        // Tipo de servicio
-        servicio_mantenimiento: tipoServicio === 'mantenimiento',
-        servicio_otro: tipoServicio === 'otro',
-        servicio_cual: tipoServicio === 'otro' ? otroServicio.trim() : null,
-        
-        // Calificación (enviar número solo para la seleccionada)
-        calificacion_excelente: calificacion === 'excelente' ? 5 : null,
-        calificacion_muy_bueno: calificacion === 'muy_bueno' ? 4 : null,
-        calificacion_bueno: calificacion === 'bueno' ? 3 : null,
-        calificacion_regular: calificacion === 'regular' ? 2 : null,
-        calificacion_malo: calificacion === 'malo' ? 1 : null,
-        
-        // Observaciones y firma (incluimos el período en observaciones)
-        observaciones: `Período evaluado: ${periodoEvaluar.trim()}${observaciones.trim() ? '\n\nObservaciones adicionales:\n' + observaciones.trim() : ''}`,
-        firma_cliente_base64: firmaClienteBase64,
-        nombre_firma: clienteZona.trim(), // Usamos el nombre del cliente
-        cedula_firma: null, // Campo opcional
-        fecha_firma: fechaActual,
-        
-        // Coordenadas (opcionales)
-        latitud: null,
-        longitud: null,
-      };
+     const data = {
+  registro_cliente_id: parseInt(registroId as string),
+  fecha_evaluacion: fechaActual,
+
+  cliente_zona: clienteZona.trim(),
+  direccion: direccion.trim(),
+  telefono: telefono.trim(),
+  ciudad: ciudad.trim(),
+
+  periodo_inicio: null,
+  periodo_fin: null,
+
+  nombre_evaluador: evaluador.trim(),
+  cargo_evaluador: 'Cliente',
+
+  supervisor_asignado: supervisorAsignado || null,
+
+  // ✅ LO QUE REALMENTE USA EL BACKEND
+  servicio_generales: serviciosSeleccionados.includes('generales'),
+  servicio_mantenimiento: serviciosSeleccionados.includes('mantenimiento'),
+  servicio_otro: serviciosSeleccionados.includes('otro'),
+
+  // ✅ SOLO SI ES OTRO
+  servicio_cual: serviciosSeleccionados.includes('otro')
+    ? otroServicio.trim()
+    : null,
+
+  // Calificación
+  calificacion_excelente: calificacion === 'excelente' ? 5 : null,
+  calificacion_muy_bueno: calificacion === 'muy_bueno' ? 4 : null,
+  calificacion_bueno: calificacion === 'bueno' ? 3 : null,
+  calificacion_regular: calificacion === 'regular' ? 2 : null,
+  calificacion_malo: calificacion === 'malo' ? 1 : null,
+
+  observaciones,
+  firma_cliente_base64: firmaClienteBase64,
+  nombre_firma: clienteZona,
+  cedula_firma: null,
+  fecha_firma: fechaActual,
+};
+
 
       console.log('🔍 Enviando evaluación de servicio:');
       console.log('📋 registroId:', registroId);
@@ -349,47 +365,8 @@ if (showSignaturePad) {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Tipo de Servicio */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>SERVICIOS GENERALES Y ESPECIALES</Text>
-          <Text style={styles.label}>Tipo de Servicio *</Text>
-          <View style={styles.checkboxGroup}>
-            <TouchableOpacity
-              style={styles.checkboxItem}
-              onPress={() => setTipoServicio('mantenimiento')}
-            >
-              <View style={styles.checkbox}>
-                {tipoServicio === 'mantenimiento' && (
-                  <Ionicons name="checkmark" size={18} color={COLORS.primary} />
-                )}
-              </View>
-              <Text style={styles.checkboxLabel}>MANTENIMIENTO</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.checkboxItem}
-              onPress={() => setTipoServicio('otro')}
-            >
-              <View style={styles.checkbox}>
-                {tipoServicio === 'otro' && (
-                  <Ionicons name="checkmark" size={18} color={COLORS.primary} />
-                )}
-              </View>
-              <Text style={styles.checkboxLabel}>OTRO</Text>
-            </TouchableOpacity>
-          </View>
-
-          {tipoServicio === 'otro' && (
-            <TextInput
-              style={styles.input}
-              placeholder="Especifique el servicio"
-              value={otroServicio}
-              onChangeText={setOtroServicio}
-            />
-          )}
-        </View>
-
-        {/* Datos del Cliente */}
+        
+      
         <View style={styles.card}>
           <Text style={styles.cardTitle}>DATOS DEL CLIENTE</Text>
           
@@ -426,6 +403,69 @@ if (showSignaturePad) {
   onChangeText={setCiudad}
 />
         </View>
+
+ <View style={styles.card}>
+  <Text style={styles.cardTitle}>SELECCIONE SERVICIO A EVALUAR</Text>
+
+  <View style={styles.checkboxGroup}>
+
+    {/* SERVICIOS GENERALES Y ESPECIALES */}
+    <TouchableOpacity
+      style={styles.checkboxItem}
+      onPress={() => toggleServicio('generales')}
+    >
+      <View style={styles.checkbox}>
+        {serviciosSeleccionados.includes('generales') && (
+          <Ionicons name="checkmark" size={18} color={COLORS.primary} />
+        )}
+      </View>
+      <Text style={styles.checkboxLabel}>
+        SERVICIOS GENERALES Y ESPECIALES
+      </Text>
+    </TouchableOpacity>
+
+    {/* MANTENIMIENTO */}
+    <TouchableOpacity
+      style={styles.checkboxItem}
+      onPress={() => toggleServicio('mantenimiento')}
+    >
+      <View style={styles.checkbox}>
+        {serviciosSeleccionados.includes('mantenimiento') && (
+          <Ionicons name="checkmark" size={18} color={COLORS.primary} />
+        )}
+      </View>
+      <Text style={styles.checkboxLabel}>MANTENIMIENTO</Text>
+    </TouchableOpacity>
+
+    {/* OTRO */}
+    <TouchableOpacity
+      style={styles.checkboxItem}
+      onPress={() => toggleServicio('otro')}
+    >
+      <View style={styles.checkbox}>
+        {serviciosSeleccionados.includes('otro') && (
+          <Ionicons name="checkmark" size={18} color={COLORS.primary} />
+        )}
+      </View>
+      <Text style={styles.checkboxLabel}>OTRO</Text>
+    </TouchableOpacity>
+
+  </View>
+
+  {/* CAMPO ¿CUÁL? */}
+  {serviciosSeleccionados.includes('otro') && (
+    <>
+      <Text style={styles.label}>¿Cuál?</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Especifique el servicio"
+        value={otroServicio}
+        onChangeText={setOtroServicio}
+      />
+    </>
+  )}
+</View>
+
 
         {/* Datos de la Evaluación */}
         <View style={styles.card}>

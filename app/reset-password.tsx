@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 // --- Paleta de Colores ---
 const COLORS = {
   primary: '#C62828',
-  background: '#E3F2FD',
+  background: '#FFFFFF',
   card: '#FFFFFF',
   textPrimary: '#212121',
   textSecondary: '#757575',
@@ -27,7 +27,7 @@ const COLORS = {
 
 // --- Configuración de la API ---
 // ¡¡¡CAMBIA ESTA IP POR LA TUYA!!!
-const API_URL = 'https://operaciones.lavianda.com.co/:8000/api';
+const API_URL = 'https://operaciones.lavianda.com.co/api';
 
 export default function ResetPasswordScreen() {
   const [token, setToken] = useState<string>('');

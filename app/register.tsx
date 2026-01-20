@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 // --- Paleta de Colores ---
 const COLORS = {
   primary: '#C62828',
-  background: '#E3F2FD',
+  background: '#FFFFFF',
   card: '#FFFFFF',
   textPrimary: '#212121',
   textSecondary: '#757575',

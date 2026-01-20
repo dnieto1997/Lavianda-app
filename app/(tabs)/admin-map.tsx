@@ -103,6 +103,8 @@ export default function AdminMap() {
     fetchFormMarkers,
     selectedUserRoute,
     startLiveTracking,
+    
+  
   } = useRealTimeTracking();
 
   const { user } = useAuth() as { user: any | null };
@@ -127,14 +129,16 @@ export default function AdminMap() {
     return "#44ff44";
   };
 
-  const formatDate = (d: Date) => d.toISOString().split("T")[0];
+  
 
   const formTypes = [
     "Acta_de_Inicio",
     "Formulario_Inpeccion",
     "Informe_de_Supervisión",
     "Inicio_servicio",
-    "Novedades_servicio"
+    "Novedades_servicio",
+    "cronograma",
+    "acta_reunion"
   ];
   const formatearNombre = (texto: string) => {
   return texto.replace(/_/g, " "); // quita _
@@ -181,7 +185,8 @@ export default function AdminMap() {
         q
       )}`;
       const resp = await axios.get(url, {
-        headers: { Authorization: `Bearer ${user?.token}` },
+        headers: { Authorization: `Bearer ${user?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' },
       });
       setFilteredUsers(resp.data?.data ?? []);
     } catch (err) {
@@ -192,6 +197,21 @@ export default function AdminMap() {
     }
   };
 
+  const formatDateLocal = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+useEffect(() => {
+  const load = async () => {
+    await refreshData();
+  };
+
+  load();
+}, []);
+
   // === SELECT USER + DATE ===
   const handleUserSelect = async (
     userId: number,
@@ -201,15 +221,16 @@ export default function AdminMap() {
     setSelectedDate(date);
     try {
       await startLiveTracking(userId);
-      const formatted = formatDate(date);
-      await fetchUserLocationsByDate(userId, formatted);
-      await fetchFormMarkers(userId, formatted);
+      const formattedDate = formatDateLocal(date);
+      await fetchUserLocationsByDate(userId, formattedDate);
+
+      await fetchFormMarkers(userId, formattedDate);
     } catch (err) {
       console.error(err);
     }
   };
 
-  // === AUTO REFRESH EVERY 30s IF TODAY ===
+/*   // === AUTO REFRESH EVERY 30s IF TODAY ===
   useEffect(() => {
     if (!selectedUser) return;
     const isToday = formatDate(selectedDate) === formatDate(new Date());
@@ -217,18 +238,12 @@ export default function AdminMap() {
     const interval = setInterval(() => {
       fetchUserLocationsByDate(selectedUser, formatDate(selectedDate));
       fetchFormMarkers(selectedUser, formatDate(selectedDate));
-    }, 30000);
+    }, 40000);
     return () => clearInterval(interval);
-  }, [selectedUser, selectedDate]);
+  }, [selectedUser, selectedDate]); */
 
-  // === INIT ===
-  useEffect(() => {
-    (async () => {
-      await refreshData();
-      await connectWebSocket();
-    })();
-    return () => disconnectWebSocket();
-  }, []);
+
+
 
   // === GROUP ROUTES BY sessionId ===
   const groupedRoutes = React.useMemo(() => {
@@ -428,15 +443,21 @@ const segmentedRoutes = React.useMemo(() => {
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mapa Tracking</Text>
-        <TouchableOpacity onPress={refreshData}>
-          <Ionicons name="refresh" size={22} color="#fff" />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.header}>
+  <TouchableOpacity onPress={() => router.back()}>
+    <Ionicons name="arrow-back" size={24} color="#fff" />
+  </TouchableOpacity>
+
+  <Text style={styles.headerTitle}>Mapa</Text>
+
+  <View style={styles.refreshContainer}>
+    <TouchableOpacity onPress={refreshData} style={styles.refreshButton}>
+      <Ionicons name="refresh" size={22} color="#fff" />
+    </TouchableOpacity>
+    <Text style={styles.refreshText}>Actualizar ubicaciones</Text>
+  </View>
+</View>
+
 
       {/* Map */}
       <View style={styles.mapContainer}>
@@ -450,6 +471,8 @@ const segmentedRoutes = React.useMemo(() => {
       </View>
 
       {/* Info panel */}
+      <Text style={styles.updateRoutesText}>Actualizar recorridos</Text>
+
       <ScrollView
         style={styles.userList}
         refreshControl={
@@ -579,7 +602,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#eee",
     alignItems: "center",
   },
-  userItemSelected: { backgroundColor: "#e3f2fd" },
+  userItemSelected: { backgroundColor: "#FFFFFF" },
   userName: { fontSize: 14 },
   userStatus: { fontSize: 12, color: "#555" },
   formMarker: {
@@ -599,6 +622,30 @@ const styles = StyleSheet.create({
     padding: 14,
     elevation: 5,
   },
+  updateRoutesText: {
+  textAlign: "center",
+  fontSize: 15,
+  color: "black",
+  marginBottom: 6,
+  fontWeight: "500",
+},
+
+  refreshContainer: {
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+refreshButton: {
+  padding: 4,
+},
+
+refreshText: {
+  marginTop: 2,
+  fontSize: 12,
+  color: "rgba(255,255,255,0.85)",
+  fontWeight: "500",
+},
+
   markerInfoTitle: { fontWeight: "bold", fontSize: 16, marginBottom: 4 },
   closeInfoButton: {
     marginTop: 8,

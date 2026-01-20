@@ -18,7 +18,6 @@ import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
-import { useFocusEffect } from "@react-navigation/native";
 
 // --- Configuración de la API ---
 const API_BASE = "https://operaciones.lavianda.com.co/api";
@@ -26,12 +25,12 @@ const API_BASE = "https://operaciones.lavianda.com.co/api";
 // --- Paleta de Colores ---
 const COLORS = {
   primary: "#C62828",
-  background: "#E3F2FD",
+  background: "#FFFFFF",
   card: "#FFFFFF",
   textPrimary: "#212121",
   textSecondary: "#757575",
   success: "#4CAF50",
-  warning: "#FF9800",
+  warning: "#1E3A8A",
   error: "#F44336",
   danger: "#F44336",
   border: "#E0E0E0",
@@ -49,6 +48,7 @@ interface RegistroDetalle {
     direccion?: string;
     ciudad?: string;
     type?: string;
+    contrato?: string;
   };
   supervisor_id?: number;
   supervisor?: {
@@ -209,7 +209,6 @@ export default function RegistroDetalleScreen() {
   const [formulariosPagina, setFormulariosPagina] = useState(1);
   const [evaluacionesPagina, setEvaluacionesPagina] = useState(1);
   const [cargandoMasFormularios, setCargandoMasFormularios] = useState(false);
-  const [cargandoMasEvaluaciones, setCargandoMasEvaluaciones] = useState(false);
   const [totalFormularios, setTotalFormularios] = useState(0);
   const [totalEvaluaciones, setTotalEvaluaciones] = useState(0);
   const ITEMS_POR_PAGINA = 10;
@@ -217,27 +216,23 @@ export default function RegistroDetalleScreen() {
     useState(false);
   const [puedeCrearNovedadesServicio, setPuedeCrearNovedadesServicio] =
     useState(false);
-    const [puedeCrearInspecciones, setPuedeCrearInspecciones] = useState(false);
-const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
-
-  // Funciones auxiliares para evaluaciones
-  const getTipoServicio = (evaluacion: EvaluacionServicio): string => {
-    if (evaluacion.servicio_mantenimiento) return "MANTENIMIENTO";
-    if (evaluacion.servicio_otro)
-      return evaluacion.servicio_cual
-        ? evaluacion.servicio_cual.toUpperCase()
-        : "OTRO";
-    return "NO ESPECIFICADO";
-  };
-
-  const getCalificacion = (evaluacion: EvaluacionServicio): string => {
-    if (evaluacion.calificacion_excelente) return "excelente";
-    if (evaluacion.calificacion_muy_bueno) return "muy_bueno";
-    if (evaluacion.calificacion_bueno) return "bueno";
-    if (evaluacion.calificacion_regular) return "regular";
-    if (evaluacion.calificacion_malo) return "malo";
-    return "no_especificado";
-  };
+  const [puedeCrearInspecciones, setPuedeCrearInspecciones] = useState(false);
+  const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
+  const FORM_TABS = [
+    { key: "actas", label: "Actas de Inicio" },
+    { key: "inspecciones", label: "Inspecciones" },
+    { key: "cronogramas", label: "Cronogramas de Trabajo" },
+    { key: "evaluaciones", label: "Evaluaciones" },
+    { key: "acta_reunion", label: "Acta de Reunión" },
+    { key: "inicio_servicio", label: "Inicio de Servicio" },
+    { key: "novedades", label: "Novedades de Servicio" },
+  ];
+  const [activeTab, setActiveTab] = useState(FORM_TABS[0].key);
+  const [cronogramas, setCronogramas] = useState<any[]>([]);
+  const [totalCronogramas, setTotalCronogramas] = useState(0);
+  const [paginaCronogramas, setPaginaCronogramas] = useState(1);
+  const [puedeCrearCronograma, setPuedeCrearCronograma] = useState(false);
+  
 
   const getCalificacionTexto = (evaluacion: EvaluacionServicio): string => {
     if (evaluacion.calificacion_excelente) return "EXCELENTE";
@@ -247,6 +242,8 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
     if (evaluacion.calificacion_malo) return "MALO";
     return "NO ESPECIFICADO";
   };
+
+
 
   // Debug: Monitorear cambios en evaluaciones
   React.useEffect(() => {
@@ -267,7 +264,8 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
     try {
       const response = await axios.get(
         `${API_BASE}/registros-clientes/${registroId}/inicio-servicio?pagina=${paginaInicioServicio + 1}&limite=${ITEMS_POR_PAGINA}`,
-        { headers: { Authorization: `Bearer ${user?.token}` } }
+        { headers: { Authorization: `Bearer ${user?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' } }
       );
       setFormulariosInicioServicio((prev) => [
         ...prev,
@@ -281,29 +279,6 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
     }
   };
 
-  // Función para cargar más evaluaciones (paginación)
-  const cargarMasEvaluaciones = async () => {
-    if (cargandoMasEvaluaciones || evaluaciones.length >= totalEvaluaciones)
-      return;
-
-    setCargandoMasEvaluaciones(true);
-    try {
-      const response = await axios.get(
-        `${API_BASE}/registros-clientes/${registroId}/evaluaciones?pagina=${evaluacionesPagina + 1}&limite=${ITEMS_POR_PAGINA}`,
-        { headers: { Authorization: `Bearer ${user?.token}` } }
-      );
-
-      const nuevasEvaluaciones = response.data.evaluaciones || [];
-      setEvaluaciones((prev) => [...prev, ...nuevasEvaluaciones]);
-      setEvaluacionesPagina((prev) => prev + 1);
-
-      console.log("⭐ Cargadas", nuevasEvaluaciones.length, "evaluaciones más");
-    } catch (error) {
-      console.error("Error al cargar más evaluaciones:", error);
-    } finally {
-      setCargandoMasEvaluaciones(false);
-    }
-  };
   const [showCambiarSupervisorModal, setShowCambiarSupervisorModal] =
     useState(false);
 
@@ -317,6 +292,16 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
   const [nombreNuevaCarpeta, setNombreNuevaCarpeta] = useState("");
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [actasReunion, setActasReunion] = useState<any[]>([]);
+const [totalActasReunion, setTotalActasReunion] = useState(0);
+const [paginaActasReunion, setPaginaActasReunion] = useState(1);
+const [puedeCrearActaReunion, setPuedeCrearActaReunion] = useState(false);
+const [paginaActas, setPaginaActas] = useState(1);
+const [paginaInspecciones, setPaginaInspecciones] = useState(1);
+const [paginaEvaluaciones, setPaginaEvaluaciones] = useState(1);
+const [paginaActaReunion, setPaginaActaReunion] = useState(1);
+
+  const { signOut } = useAuth();
 
   // Verificar permisos de administrador
   const isAdmin =
@@ -328,55 +313,136 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
     }
   }, [registroId]);
 
- const loadRegistroDetalle = async () => {
+const loadRegistroDetalle = async () => {
   try {
     setLoading(true);
 
-    const response = await axios.get(`${API_BASE}/registros-clientes/${registroId}`, {
-      headers: { Authorization: `Bearer ${user?.token}` },
-    });
+    const response = await axios.get(
+      `${API_BASE}/registros-clientes/${registroId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${user?.token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      }
+    );
 
     const data = response.data;
     console.log("📋 Datos del backend recibidos:", data);
 
-    // === DATOS PRINCIPALES ===
+    /* ===========================
+       DATOS PRINCIPALES
+       =========================== */
     setRegistro(data.registro);
-    setFormularios(data.formularios?.slice(0, ITEMS_POR_PAGINA) || []);
+
+    /* ===========================
+       ACTAS DE INICIO  ✅
+       =========================== */
+    setFormularios(data.formularios || []);
     setTotalFormularios(data.formularios?.length || 0);
-    setInspecciones(data.inspecciones?.slice(0, ITEMS_POR_PAGINA) || []);
-    setTotalFormulariosInicioServicio(data.formularioInicioServicio?.length || 0);
-    setFormulariosInicioServicio(data.formularioInicioServicio?.slice(0, ITEMS_POR_PAGINA) || []);
-    setNovedadesServicio(data.formularioNovedadesServicio?.slice(0, ITEMS_POR_PAGINA) || []);
-    setTotalNovedadesServicio(data.formularioNovedadesServicio?.length || 0);
-    setEvaluaciones(data.evaluaciones?.slice(0, ITEMS_POR_PAGINA) || []);
+
+    /* ===========================
+       CRONOGRAMAS
+       =========================== */
+    setCronogramas(data.cronogramas || []);
+    setTotalCronogramas(data.cronogramas?.length || 0);
+
+    /* ===========================
+       ACTAS DE REUNIÓN
+       =========================== */
+    setActasReunion(data.actas_reunion || []);
+    setTotalActasReunion(data.actas_reunion?.length || 0);
+
+    /* ===========================
+       INSPECCIONES
+       =========================== */
+    setInspecciones(data.inspecciones || []);
+
+    /* ===========================
+       INICIO SERVICIO
+       =========================== */
+    setFormulariosInicioServicio(
+      data.formularioInicioServicio || []
+    );
+    setTotalFormulariosInicioServicio(
+      data.formularioInicioServicio?.length || 0
+    );
+
+    /* ===========================
+       NOVEDADES
+       =========================== */
+    setNovedadesServicio(
+      data.formularioNovedadesServicio || []
+    );
+    setTotalNovedadesServicio(
+      data.formularioNovedadesServicio?.length || 0
+    );
+
+    /* ===========================
+       EVALUACIONES
+       =========================== */
+    setEvaluaciones(data.evaluaciones || []);
     setTotalEvaluaciones(data.evaluaciones?.length || 0);
+
+    /* ===========================
+       EMPLEADOS
+       =========================== */
     setEmpleados(data.empleados || []);
 
-    // === PERMISOS ===
+    /* ===========================
+       PERMISOS
+       =========================== */
     setPuedeCrearFormulario(data.puede_crear_acta_inicio || false);
     setPuedeCrearInicioServicio(data.puede_crear_inicio_servicio || false);
     setPuedeCrearNovedadesServicio(data.puede_crear_novedades_servicio || false);
-
-    // ✅ NUEVOS PERMISOS QUE FALTABAN
     setPuedeCrearInspecciones(data.puede_crear_inspecciones || false);
     setPuedeCrearEvaluacion(data.puede_crear_evaluacion || false);
+    setPuedeCrearCronograma(data.puede_crear_cronograma || false);
+    setPuedeCrearActaReunion(data.puede_crear_acta_reunion || false);
 
-    // === PAGINACIÓN ===
-    setFormulariosPagina(1);
+    /* ===========================
+       PAGINACIÓN (reset correcto)
+       =========================== */
+    setPaginaActas(1);
+    setPaginaCronogramas(1);
+    setPaginaActasReunion(1);
     setPaginaInicioServicio(1);
     setPaginaNovedadesServicio(1);
     setEvaluacionesPagina(1);
+
   } catch (error) {
-    console.error("❌ Error al cargar detalle del registro:", error);
-    Alert.alert("Error", "No se pudo cargar la información del registro");
-    router.back();
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      Alert.alert(
+        "Sesión expirada",
+        "Tu sesión ha vencido. Por favor inicia sesión nuevamente.",
+        [
+          {
+            text: "OK",
+            onPress: () => signOut(),
+          },
+        ]
+      );
+      return;
+    }
+
+    console.error("❌ Error cargando dashboard:", error);
   } finally {
     setLoading(false);
-    setRefreshing(false);
   }
 };
 
 
+  const paginar = <T,>(data: T[], pagina: number) => {
+  return data.slice(0, pagina * ITEMS_POR_PAGINA);
+};
+useEffect(() => {
+  setPaginaActas(1);
+  setPaginaInspecciones(1);
+  setPaginaCronogramas(1);
+  setPaginaEvaluaciones(1);
+  setPaginaActaReunion(1);
+}, [activeTab]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -450,6 +516,36 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
     });
   };
 
+  const crearCronograma = () => {
+    if (!registro) return;
+
+    router.push({
+      pathname: "/cronograma",
+      params: {
+        registroId: registro.id.toString(),
+        empresaId: registro.empresa_id.toString(),
+        empresa: registro.empresa.nombre,
+        nit: registro.empresa?.identificacion || "",
+        modo: "crear",
+      },
+    });
+  };
+
+   const crearActaReunion = () => {
+    if (!registro) return;
+
+    router.push({
+      pathname: "/acta-reunion",
+      params: {
+        registroId: registro.id.toString(),
+        empresaId: registro.empresa_id.toString(),
+        empresa: registro.empresa.nombre,
+        nit: registro.empresa?.identificacion || "",
+        modo: "crear",
+      },
+    });
+  };
+
   const abrirFormulario = (formularioId: number) => {
     router.push({
       pathname: "/formulario-acta-inicio",
@@ -485,10 +581,37 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
 
   const abrirInspeccion = (inspeccionId: number) => {
     router.push({
-      pathname: "/inspeccion-detalle",
-      params: { id: inspeccionId.toString() },
+      pathname: "/formulario-supervision-completo",
+      params: {
+        registroId: registroId,
+        formularioId: inspeccionId,
+        modo: "ver",
+      },
     });
   };
+
+  const abrirCronograma = (inspeccionId: number) => {
+    router.push({
+      pathname: "/cronograma",
+      params: {
+        registroId: registroId,
+        formularioId: inspeccionId,
+        modo: "ver",
+      },
+    });
+  };
+
+   const abrirActareunion = (inspeccionId: number) => {
+    router.push({
+      pathname: "/acta-reunion",
+      params: {
+        registroId: registroId,
+        formularioId: inspeccionId,
+        modo: "ver",
+      },
+    });
+  };
+
 
   const abrirEvaluacion = (evaluacionId: number) => {
     console.log("🔍 Navegando a evaluación de servicio:", evaluacionId);
@@ -498,17 +621,17 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
     });
   };
 
- const crearNuevaEvaluacion = () => {
+  const crearNuevaEvaluacion = () => {
     router.push({
       pathname: "/formulario-evaluacion-servicio",
-      params: {  registroId: registro?.id.toString(),
+      params: {
+        registroId: registro?.id.toString(),
         empresaId: registro?.empresa_id.toString(),
         empresaNombre: registro?.empresa.nombre,
         direccion: registro?.empresa.direccion || "",
-        ciudad: registro?.empresa.ciudad || "", },
+        ciudad: registro?.empresa.ciudad || "",
+      },
     });
-
-    
   };
 
   const eliminarFormulario = (formularioId: number) => {
@@ -598,12 +721,8 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
     );
   };
 
-
- const eliminarInspeccion = async (id: number) => {
-  Alert.alert(
-    "Eliminar Visita",
-    "¿Estás seguro de eliminar esta visita?",
-    [
+  const eliminarInspeccion = async (id: number) => {
+    Alert.alert("Eliminar Visita", "¿Estás seguro de eliminar esta visita?", [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Eliminar",
@@ -614,44 +733,46 @@ const [puedeCrearEvaluacion, setPuedeCrearEvaluacion] = useState(false);
               headers: { Authorization: `Bearer ${user?.token}` },
             });
 
-            setInspecciones(prev => prev.filter(item => item.id !== id));
+            setInspecciones((prev) => prev.filter((item) => item.id !== id));
             Alert.alert("Éxito", "Visita eliminada correctamente");
           } catch (error) {
             console.error("Error al eliminar visita:", error);
             Alert.alert("Error", "No se pudo eliminar la visita");
           }
-        }
-      }
-    ]
-  );
-};
+        },
+      },
+    ]);
+  };
 
-const eliminarEvaluacion = async (id: number) => {
-  Alert.alert(
-    "Eliminar Evaluación",
-    "¿Estás seguro de eliminar esta evaluación?",
-    [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Eliminar",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await axios.delete(`${API_BASE}/formularios/evaluacion-servicio/${id}`, {
-              headers: { Authorization: `Bearer ${user?.token}` },
-            });
+  const eliminarEvaluacion = async (id: number) => {
+    Alert.alert(
+      "Eliminar Evaluación",
+      "¿Estás seguro de eliminar esta evaluación?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await axios.delete(
+                `${API_BASE}/formularios/evaluacion-servicio/${id}`,
+                {
+                  headers: { Authorization: `Bearer ${user?.token}` },
+                }
+              );
 
-            setEvaluaciones(prev => prev.filter(item => item.id !== id));
-            Alert.alert("Éxito", "Evaluación eliminada correctamente");
-          } catch (error) {
-            console.error("Error al eliminar evaluación:", error);
-            Alert.alert("Error", "No se pudo eliminar la evaluación");
-          }
-        }
-      }
-    ]
-  );
-};
+              setEvaluaciones((prev) => prev.filter((item) => item.id !== id));
+              Alert.alert("Éxito", "Evaluación eliminada correctamente");
+            } catch (error) {
+              console.error("Error al eliminar evaluación:", error);
+              Alert.alert("Error", "No se pudo eliminar la evaluación");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const cambiarSupervisor = async (supervisorId: number) => {
     try {
@@ -685,7 +806,8 @@ const eliminarEvaluacion = async (id: number) => {
         axios.get(
           `${API_BASE}/registros-clientes/${registroId}/carpetas${params}`,
           {
-            headers: { Authorization: `Bearer ${user?.token}` },
+            headers: { Authorization: `Bearer ${user?.token}`, 'Content-Type': 'application/json',
+            'Accept': 'application/json' },
           }
         ),
         axios.get(
@@ -994,6 +1116,11 @@ const eliminarEvaluacion = async (id: number) => {
           </View>
 
           <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Contrato:</Text>
+            <Text style={styles.infoValue}>{registro.empresa.contrato}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Supervisor:</Text>
             <Text style={styles.infoValue}>
               {registro.supervisor?.name || "Sin asignar"}
@@ -1029,489 +1156,790 @@ const eliminarEvaluacion = async (id: number) => {
           </View>
         </View>
 
-        {/* Sección de formularios */}
         <Text style={styles.sectionTitleForm}>Formularios</Text>
-        <View style={styles.section}>
-  <View style={styles.sectionHeader}>
-    {puedeCrearFormulario && (
-      <TouchableOpacity
-        style={styles.createButton}
-        onPress={crearFormulario}
-      >
-        <Ionicons name="add" size={20} color={COLORS.card} />
-        <Text style={styles.createButtonText}>Crear Acta de Inicio</Text>
-      </TouchableOpacity>
-    )}
-  </View>
 
-  {formularios.length === 0 ? (
-    <View style={styles.emptyState}>
-      <Ionicons name="document-outline" size={48} color={COLORS.textSecondary} />
-      <Text style={styles.emptyStateText}>
-        No hay Actas de Inicio creadas.
-      </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabsContainer}
+        >
+          {FORM_TABS.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tab, activeTab === tab.key && styles.activeTab]}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab.key && styles.activeTabText,
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Sección de formularios */}
+
+       {activeTab === "actas" && (
+  <View style={styles.section}>
+    <View style={styles.sectionHeader}>
       {puedeCrearFormulario && (
-        <Text style={styles.emptyStateText}>Presiona "Crear Acta de Inicio" para comenzar.</Text>
-      )}
-    </View>
-  ) : (
-    <>
-      {formularios.map((formulario) => (
-        <View key={formulario.id} style={styles.formularioCard}>
-          <View style={styles.formularioHeader}>
-            <Text style={styles.formularioTitle}>
-              ACTA DE INICIO DEL SERVICIO DE ASEO INTEGRAL Y CAFETERIA
-            </Text>
-
-            {isAdmin && (
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => eliminarFormulario(formulario.id)}
-              >
-                <Ionicons name="trash" size={20} color={COLORS.error} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.formularioInfo}>
-            <Text style={styles.formularioLabel}>Supervisor:</Text>
-            <Text style={styles.formularioValue}>
-              {formulario.supervisor?.name || "Sin asignar"}
-            </Text>
-          </View>
-
-          <View style={styles.formularioInfo}>
-            <Text style={styles.formularioLabel}>Creado por:</Text>
-            <Text style={styles.formularioValue}>
-              {formulario.creador?.name || "Usuario desconocido"}
-            </Text>
-          </View>
-
-          <View style={styles.formularioInfo}>
-            <Text style={styles.formularioLabel}>Fecha:</Text>
-            <Text style={styles.formularioValue}>
-              {new Date(formulario.created_at).toLocaleDateString()}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.openFormButton}
-            onPress={() => abrirFormulario(formulario.id)}
-          >
-            <Text style={styles.openFormButtonText}>Abrir Formulario</Text>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
-          </TouchableOpacity>
-        </View>
-      ))}
-    </>
-  )}
-</View>
-
-
-<View style={styles.section}>
-  <View style={styles.sectionHeader}>
-    {puedeCrearInspecciones && (
-      <TouchableOpacity
-        style={styles.createButton}
-        onPress={crearNuevaVisita}
-      >
-        <Ionicons name="clipboard-outline" size={20} color={COLORS.card} />
-        <Text style={styles.createButtonText}>Crear Visita / Inspección</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-
-  {inspecciones.length === 0 ? (
-    <View style={styles.emptyState}>
-      <Ionicons name="clipboard-outline" size={48} color={COLORS.textSecondary} />
-      <Text style={styles.emptyStateText}>
-        No hay visitas / inspecciones creadas aún.
-      </Text>
-    </View>
-  ) : (
-    <>
-    {inspecciones.map((inspeccion) => (
-  <View key={inspeccion.id} style={styles.formularioCard}>
-    <View style={styles.formularioHeader}>
-      <Text style={styles.formularioTitle}>
-        VISITA / INFORME DE SUPERVISIÓN COMPLETO
-      </Text>
-
-      {/* BOTÓN ELIMINAR VISITA */}
-      {isAdmin && (
         <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => eliminarInspeccion(inspeccion.id)}
+          style={styles.createButton}
+          onPress={crearFormulario}
         >
-          <Ionicons name="trash" size={20} color={COLORS.error} />
+          <Ionicons name="add" size={20} color={COLORS.card} />
+          <Text style={styles.createButtonText}>
+            Crear Acta de Inicio
+          </Text>
         </TouchableOpacity>
       )}
     </View>
 
-    <View style={styles.formularioInfo}>
-      <Text style={styles.formularioLabel}>Consecutivo:</Text>
-      <Text style={styles.formularioValue}>
-        {inspeccion.consecutivo || "Sin consecutivo"}
-      </Text>
-    </View>
-
-    <View style={styles.formularioInfo}>
-      <Text style={styles.formularioLabel}>Inspector:</Text>
-      <Text style={styles.formularioValue}>
-        {inspeccion.usuario?.name || "Usuario desconocido"}
-      </Text>
-    </View>
-
-    <View style={styles.formularioInfo}>
-      <Text style={styles.formularioLabel}>Fecha inspección:</Text>
-      <Text style={styles.formularioValue}>
-        {inspeccion.fecha_inspeccion
-          ? new Date(inspeccion.fecha_inspeccion).toLocaleDateString()
-          : "Sin fecha"}
-      </Text>
-    </View>
-
-
-
-    <TouchableOpacity
-      style={styles.openFormButton}
-      onPress={() => abrirInspeccion(inspeccion.id)}
-    >
-      <Text style={styles.openFormButtonText}>Abrir Inspección</Text>
-      <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
-    </TouchableOpacity>
-  </View>
-))}
-
-    </>
-  )}
-</View>
-
-<View style={styles.section}>
-  <View style={styles.sectionHeader}>
-    {puedeCrearEvaluacion && (
-      <TouchableOpacity
-        style={styles.createButton}
-        onPress={crearNuevaEvaluacion}
-      >
-        <Ionicons name="star-outline" size={20} color={COLORS.card} />
-        <Text style={styles.createButtonText}>Crear Evaluación</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-
-  {evaluaciones.length === 0 ? (
-    <View style={styles.emptyState}>
-      <Ionicons name="star-outline" size={48} color={COLORS.textSecondary} />
-      <Text style={styles.emptyStateText}>
-        No hay evaluaciones creadas aún.
-      </Text>
-      {puedeCrearEvaluacion && (
+    {formularios.length === 0 ? (
+      <View style={styles.emptyState}>
+        <Ionicons
+          name="document-outline"
+          size={48}
+          color={COLORS.textSecondary}
+        />
         <Text style={styles.emptyStateText}>
-          Presiona "Crear Evaluación" para comenzar.
+          No hay Actas de Inicio creadas.
         </Text>
-      )}
-    </View>
-  ) : (
-    <>
-     {evaluaciones.map((evaluacion) => (
-  <View key={evaluacion.id} style={styles.formularioCard}>
-    <View style={styles.formularioHeader}>
-      <Text style={styles.formularioTitle}>EVALUACIÓN DEL SERVICIO</Text>
+        {puedeCrearFormulario && (
+          <Text style={styles.emptyStateText}>
+            Presiona "Crear Acta de Inicio" para comenzar.
+          </Text>
+        )}
+      </View>
+    ) : (
+      <>
+        {/* LISTADO PAGINADO */}
+        {paginar(formularios, paginaActas).map((formulario) => (
+          <View key={formulario.id} style={styles.formularioCard}>
+            <View style={styles.formularioHeader}>
+              <Text style={styles.formularioTitle}>
+                ACTA DE INICIO DEL SERVICIO DE ASEO INTEGRAL Y CAFETERIA
+              </Text>
+            </View>
 
-      {/* BOTÓN ELIMINAR EVALUACIÓN */}
-      {isAdmin && (
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Supervisor:</Text>
+              <Text style={styles.formularioValue}>
+                {formulario.supervisor?.name || "Sin asignar"}
+              </Text>
+            </View>
+
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Creado por:</Text>
+              <Text style={styles.formularioValue}>
+                {formulario.creador?.name || "Usuario desconocido"}
+              </Text>
+            </View>
+
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Fecha:</Text>
+              <Text style={styles.formularioValue}>
+                {new Date(formulario.created_at).toLocaleDateString()}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.openFormButton}
+              onPress={() => abrirFormulario(formulario.id)}
+            >
+              <Text style={styles.openFormButtonText}>
+                Abrir Formulario
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={COLORS.primary}
+              />
+            </TouchableOpacity>
+          </View>
+        ))}
+
+        {/* BOTÓN VER MÁS */}
+        {formularios.length > paginaActas * ITEMS_POR_PAGINA && (
+          <TouchableOpacity
+            style={styles.verMasButton}
+            onPress={() => setPaginaActas((p) => p + 1)}
+          >
+            <Text style={styles.verMasText}>
+              Ver más ({paginaActas * ITEMS_POR_PAGINA} de {formularios.length})
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={20}
+              color={COLORS.card}
+            />
+          </TouchableOpacity>
+        )}
+      </>
+    )}
+  </View>
+)}
+
+     
+    {activeTab === "inspecciones" && (
+  <View style={styles.section}>
+    {/* HEADER → BOTÓN CREAR (UNA SOLA VEZ) */}
+    <View style={styles.sectionHeader}>
+      {puedeCrearInspecciones && (
         <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => eliminarEvaluacion(evaluacion.id)}
+          style={styles.createButton}
+          onPress={crearNuevaVisita}
         >
-          <Ionicons name="trash" size={20} color={COLORS.error} />
+          <Ionicons
+            name="clipboard-outline"
+            size={20}
+            color={COLORS.card}
+          />
+          <Text style={styles.createButtonText}>
+            Crear Informe de Supervisión
+          </Text>
         </TouchableOpacity>
       )}
     </View>
 
-    <View style={styles.formularioInfo}>
-      <Text style={styles.formularioLabel}>Consecutivo:</Text>
-      <Text style={styles.formularioValue}>
-        {evaluacion.consecutivo || "Sin consecutivo"}
-      </Text>
-    </View>
+    {/* ESTADO VACÍO */}
+    {inspecciones.length === 0 ? (
+      <View style={styles.emptyState}>
+        <Ionicons
+          name="clipboard-outline"
+          size={48}
+          color={COLORS.textSecondary}
+        />
+        <Text style={styles.emptyStateText}>
+          No hay visitas / inspecciones creadas aún.
+        </Text>
+      </View>
+    ) : (
+      <>
+        {/* LISTADO DE FORMULARIOS */}
+        {paginar(inspecciones, paginaInspecciones).map((inspeccion) => (
+          <View key={inspeccion.id} style={styles.formularioCard}>
+            <View style={styles.formularioHeader}>
+              <Text style={styles.formularioTitle}>
+                INFORME DE SUPERVISIÓN
+              </Text>
+            </View>
 
-    <View style={styles.formularioInfo}>
-      <Text style={styles.formularioLabel}>Cliente/Zona:</Text>
-      <Text style={styles.formularioValue}>
-        {evaluacion.cliente_zona || "No especificado"}
-      </Text>
-    </View>
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Consecutivo:</Text>
+              <Text style={styles.formularioValue}>
+                {inspeccion.consecutivo || "Sin consecutivo"}
+              </Text>
+            </View>
 
-    <View style={styles.formularioInfo}>
-      <Text style={styles.formularioLabel}>Calificación:</Text>
-      <Text style={styles.formularioValue}>
-        {getCalificacionTexto(evaluacion)}
-      </Text>
-    </View>
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Supervisor:</Text>
+              <Text style={styles.formularioValue}>
+                {inspeccion.usuario?.name || "Usuario desconocido"}
+              </Text>
+            </View>
 
-    <View style={styles.formularioInfo}>
-      <Text style={styles.formularioLabel}>Fecha evaluación:</Text>
-      <Text style={styles.formularioValue}>
-        {evaluacion.fecha_evaluacion || "Sin fecha"}
-      </Text>
-    </View>
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>
+                Fecha inspección:
+              </Text>
+              <Text style={styles.formularioValue}>
+                {inspeccion.fecha_inspeccion
+                  ? new Date(inspeccion.fecha_inspeccion).toLocaleDateString()
+                  : "Sin fecha"}
+              </Text>
+            </View>
 
-    <TouchableOpacity
-      style={styles.openFormButton}
-      onPress={() => abrirEvaluacion(evaluacion.id)}
-    >
-      <Text style={styles.openFormButtonText}>Abrir Evaluación</Text>
-      <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
-    </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.openFormButton}
+              onPress={() => abrirInspeccion(inspeccion.id)}
+            >
+              <Text style={styles.openFormButtonText}>
+                Abrir Informe
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={COLORS.primary}
+              />
+            </TouchableOpacity>
+          </View>
+        ))}
+
+        {/* VER MÁS */}
+        {inspecciones.length >
+          paginaInspecciones * ITEMS_POR_PAGINA && (
+          <TouchableOpacity
+            style={styles.verMasButton}
+            onPress={() =>
+              setPaginaInspecciones((p) => p + 1)
+            }
+          >
+            <Text style={styles.verMasText}>
+              Ver más ({paginaInspecciones * ITEMS_POR_PAGINA} de{" "}
+              {inspecciones.length})
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={20}
+              color={COLORS.primary}
+            />
+          </TouchableOpacity>
+        )}
+      </>
+    )}
   </View>
-))}
-
-    </>
-  )}
-</View>
+)}
 
 
+       {activeTab === "cronogramas" && (
+  <View style={styles.section}>
+    <View style={styles.sectionHeader}>
+      {puedeCrearCronograma && (
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={crearCronograma}
+        >
+          <Ionicons
+            name="clipboard-outline"
+            size={20}
+            color={COLORS.card}
+          />
+          <Text style={styles.createButtonText}>
+            Crear Cronograma de Trabajo
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
 
-
-
-
-
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            {puedeCrearInicioServicio && (
-              <TouchableOpacity
-                style={styles.createButton}
-                onPress={InicioServicio}
-              >
-                <Ionicons name="add" size={20} color={COLORS.card} />
-                <Text style={styles.createButtonText}>
-                  Crear Planilla Inicio de Servicio
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* ESTADO VACÍO */}
-          {formulariosInicioServicio.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons
-                name="document-outline"
-                size={48}
-                color={COLORS.textSecondary}
-              />
-              <Text style={styles.emptyStateText}>
-                {puedeCrearFormulario
-                  ? 'No hay planillas de inicio de servicio. Presiona "Crear Planilla Inicio de Servicio" para comenzar.'
-                  : "No hay formularios disponibles."}
+    {cronogramas.length === 0 ? (
+      <View style={styles.emptyState}>
+        <Ionicons
+          name="clipboard-outline"
+          size={48}
+          color={COLORS.textSecondary}
+        />
+        <Text style={styles.emptyStateText}>
+          No hay cronogramas creados aún.
+        </Text>
+      </View>
+    ) : (
+      <>
+        {/* LISTADO PAGINADO */}
+        {paginar(cronogramas, paginaCronogramas).map((cronograma) => (
+          <View key={cronograma.id} style={styles.formularioCard}>
+            <View style={styles.formularioHeader}>
+              <Text style={styles.formularioTitle}>
+                CRONOGRAMA DE TRABAJO
               </Text>
             </View>
-          ) : (
-            <>
-              {/* LISTA DE PLANILLAS INICIO DE SERVICIO */}
-              {formulariosInicioServicio.map((formulario) => (
-                <View key={formulario.id} style={styles.formularioCard}>
-                  <View style={styles.formularioHeader}>
-                    <Text style={styles.formularioTitle}>
-                      PLANILLA DE INICIO DE SERVICIO
-                    </Text>
 
-                    {isAdmin && (
-                      <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={() =>
-                          eliminarFormularioInicioServicio(formulario.id)
-                        }
-                      >
-                        <Ionicons name="trash" size={20} color={COLORS.error} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  <View style={styles.formularioInfo}>
-                    <Text style={styles.formularioLabel}>Supervisor:</Text>
-                    <Text style={styles.formularioValue}>
-                      {formulario.supervisor?.name || "Sin asignar"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.formularioInfo}>
-                    <Text style={styles.formularioLabel}>Creado por:</Text>
-                    <Text style={styles.formularioValue}>
-                      {formulario.creador?.name || "Usuario desconocido"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.formularioInfo}>
-                    <Text style={styles.formularioLabel}>Fecha:</Text>
-                    <Text style={styles.formularioValue}>
-                      {new Date(formulario.created_at).toLocaleDateString()}
-                    </Text>
-                  </View>
-
-                  <TouchableOpacity
-                    style={styles.openFormButton}
-                    onPress={() => abrirFormularioInicioServicio(formulario.id)}
-                  >
-                    <Text style={styles.openFormButtonText}>
-                      Abrir Formulario
-                    </Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={20}
-                      color={COLORS.primary}
-                    />
-                  </TouchableOpacity>
-                </View>
-              ))}
-
-              {/* BOTÓN VER MÁS */}
-              {formulariosInicioServicio.length <
-                totalFormulariosInicioServicio && (
-                <TouchableOpacity
-                  style={styles.verMasButton}
-                  onPress={cargarMasFormularios}
-                  disabled={cargandoMasFormulariosIS}
-                >
-                  {cargandoMasFormulariosIS ? (
-                    <ActivityIndicator size="small" color={COLORS.primary} />
-                  ) : (
-                    <>
-                      <Text style={styles.verMasText}>
-                        Ver más planillas ({formulariosInicioServicio.length} de{" "}
-                        {totalFormulariosInicioServicio})
-                      </Text>
-                      <Ionicons
-                        name="chevron-down"
-                        size={20}
-                        color={COLORS.primary}
-                      />
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          {/* BOTÓN CREAR NOVEDAD */}
-          <View style={styles.sectionHeader}>
-            {puedeCrearNovedadesServicio && (
-              <TouchableOpacity
-                style={styles.createButton}
-                onPress={NovedadesServicio}
-              >
-                <Ionicons name="add" size={20} color={COLORS.card} />
-                <Text style={styles.createButtonText}>
-                  Crear Planilla Novedades de Servicio
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* ESTADO VACÍO */}
-          {novedadesServicio.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons
-                name="document-outline"
-                size={48}
-                color={COLORS.textSecondary}
-              />
-              <Text style={styles.emptyStateText}>
-                {puedeCrearFormulario
-                  ? 'No hay planillas de novedades de servicio. Presiona "Crear Planilla Novedades de Servicio" para comenzar.'
-                  : "No hay formularios disponibles."}
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Consecutivo:</Text>
+              <Text style={styles.formularioValue}>
+                {cronograma.consecutivo || "Sin consecutivo"}
               </Text>
             </View>
-          ) : (
-            <>
-              {/* LISTA DE PLANILLAS NOVEDADES DE SERVICIO */}
-              {novedadesServicio.map((novedad) => (
-                <View key={novedad.id} style={styles.formularioCard}>
-                  <View style={styles.formularioHeader}>
-                    <Text style={styles.formularioTitle}>
-                      PLANILLA DE NOVEDADES DE SERVICIO
-                    </Text>
 
-                    {isAdmin && (
-                      <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={() =>
-                          eliminarFormularioNovedadesServicio(novedad.id)
-                        }
-                      >
-                        <Ionicons name="trash" size={20} color={COLORS.error} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Supervisor:</Text>
+              <Text style={styles.formularioValue}>
+                {cronograma.usuario?.name || "Usuario desconocido"}
+              </Text>
+            </View>
 
-                  <View style={styles.formularioInfo}>
-                    <Text style={styles.formularioLabel}>Supervisor:</Text>
-                    <Text style={styles.formularioValue}>
-                      {novedad.supervisor?.name || "Sin asignar"}
-                    </Text>
-                  </View>
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>
+                Fecha cronograma:
+              </Text>
+              <Text style={styles.formularioValue}>
+                {cronograma.created_at
+                  ? new Date(cronograma.created_at).toLocaleDateString()
+                  : "Sin fecha"}
+              </Text>
+            </View>
 
-                  <View style={styles.formularioInfo}>
-                    <Text style={styles.formularioLabel}>Creado por:</Text>
-                    <Text style={styles.formularioValue}>
-                      {novedad.creador?.name || "Usuario desconocido"}
-                    </Text>
-                  </View>
+            <TouchableOpacity
+              style={styles.openFormButton}
+              onPress={() => abrirCronograma(cronograma.id)}
+            >
+              <Text style={styles.openFormButtonText}>
+                Abrir Cronograma
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={COLORS.primary}
+              />
+            </TouchableOpacity>
+          </View>
+        ))}
 
-                  <View style={styles.formularioInfo}>
-                    <Text style={styles.formularioLabel}>Fecha creación:</Text>
-                    <Text style={styles.formularioValue}>
-                      {new Date(novedad.created_at).toLocaleDateString()}
-                    </Text>
-                  </View>
+        {/* BOTÓN VER MÁS */}
+        {cronogramas.length > paginaCronogramas * ITEMS_POR_PAGINA && (
+          <TouchableOpacity
+            style={styles.verMasButton}
+            onPress={() => setPaginaCronogramas(p => p + 1)}
+          >
+            <Text style={styles.verMasText}>
+              Ver más ({paginaCronogramas * ITEMS_POR_PAGINA} de {cronogramas.length})
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={20}
+              color={COLORS.card}
+            />
+          </TouchableOpacity>
+        )}
+      </>
+    )}
+  </View>
+)}
 
-                  <TouchableOpacity
-                    style={styles.openFormButton}
-                    onPress={() => abrirFormularioNovedadesServicio(novedad.id)}
-                  >
-                    <Text style={styles.openFormButtonText}>
-                      Abrir Formulario
-                    </Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={20}
-                      color={COLORS.primary}
-                    />
-                  </TouchableOpacity>
-                </View>
-              ))}
 
-              {/* BOTÓN VER MÁS */}
-              {novedadesServicio.length < totalNovedadesServicio && (
-                <TouchableOpacity
-                  style={styles.verMasButton}
-                  onPress={cargarMasFormularios}
-                  disabled={cargandoMasFormularios}
-                >
-                  {cargandoMasNovedades ? (
-                    <ActivityIndicator size="small" color={COLORS.primary} />
-                  ) : (
-                    <>
-                      <Text style={styles.verMasText}>
-                        Ver más planillas ({novedadesServicio.length} de{" "}
-                        {totalNovedadesServicio})
-                      </Text>
-                      <Ionicons
-                        name="chevron-down"
-                        size={20}
-                        color={COLORS.primary}
-                      />
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
+         {activeTab === "acta_reunion" && (
+  <View style={styles.section}>
+    <View style={styles.sectionHeader}>
+      {puedeCrearActaReunion && (
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={crearActaReunion}
+        >
+          <Ionicons
+            name="clipboard-outline"
+            size={20}
+            color={COLORS.card}
+          />
+          <Text style={styles.createButtonText}>
+            Crear Acta de Reunión
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+
+    {actasReunion.length === 0 ? (
+      <View style={styles.emptyState}>
+        <Ionicons
+          name="clipboard-outline"
+          size={48}
+          color={COLORS.textSecondary}
+        />
+        <Text style={styles.emptyStateText}>
+          No hay actas de reunión creadas aún.
+        </Text>
+      </View>
+    ) : (
+      <>
+        {/* LISTADO PAGINADO */}
+        {paginar(actasReunion, paginaActasReunion).map((acta) => (
+          <View key={acta.id} style={styles.formularioCard}>
+            <View style={styles.formularioHeader}>
+              <Text style={styles.formularioTitle}>
+                ACTA DE REUNIÓN
+              </Text>
+            </View>
+
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Consecutivo:</Text>
+              <Text style={styles.formularioValue}>
+                {acta.consecutivo || "Sin consecutivo"}
+              </Text>
+            </View>
+
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Supervisor:</Text>
+              <Text style={styles.formularioValue}>
+                {acta.supervisor?.name || "Usuario desconocido"}
+              </Text>
+            </View>
+
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>
+                Fecha de Acta:
+              </Text>
+              <Text style={styles.formularioValue}>
+                {acta.created_at
+                  ? new Date(acta.created_at).toLocaleDateString()
+                  : "Sin fecha"}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.openFormButton}
+              onPress={() => abrirActareunion(acta.id)}
+            >
+              <Text style={styles.openFormButtonText}>
+                Abrir Acta
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={COLORS.primary}
+              />
+            </TouchableOpacity>
+          </View>
+        ))}
+
+        {/* BOTÓN VER MÁS */}
+        {actasReunion.length > paginaActasReunion * ITEMS_POR_PAGINA && (
+          <TouchableOpacity
+            style={styles.verMasButton}
+            onPress={() => setPaginaActasReunion(p => p + 1)}
+          >
+            <Text style={styles.verMasText}>
+              Ver más ({paginaActasReunion * ITEMS_POR_PAGINA} de {actasReunion.length})
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={20}
+              color={COLORS.card}
+            />
+          </TouchableOpacity>
+        )}
+      </>
+    )}
+  </View>
+)}
+
+
+       {activeTab === "evaluaciones" && (
+  <View style={styles.section}>
+    <View style={styles.sectionHeader}>
+      {puedeCrearEvaluacion && (
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={crearNuevaEvaluacion}
+        >
+          <Ionicons
+            name="star-outline"
+            size={20}
+            color={COLORS.card}
+          />
+          <Text style={styles.createButtonText}>
+            Crear Evaluación
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+
+    {evaluaciones.length === 0 ? (
+      <View style={styles.emptyState}>
+        <Ionicons
+          name="star-outline"
+          size={48}
+          color={COLORS.textSecondary}
+        />
+        <Text style={styles.emptyStateText}>
+          No hay evaluaciones creadas aún.
+        </Text>
+        {puedeCrearEvaluacion && (
+          <Text style={styles.emptyStateText}>
+            Presiona "Crear Evaluación" para comenzar.
+          </Text>
+        )}
+      </View>
+    ) : (
+      <>
+        {/* LISTADO PAGINADO */}
+        {paginar(evaluaciones, paginaEvaluaciones).map((evaluacion) => (
+          <View key={evaluacion.id} style={styles.formularioCard}>
+            <View style={styles.formularioHeader}>
+              <Text style={styles.formularioTitle}>
+                EVALUACIÓN DEL SERVICIO
+              </Text>
+            </View>
+
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Consecutivo:</Text>
+              <Text style={styles.formularioValue}>
+                {evaluacion.consecutivo || "Sin consecutivo"}
+              </Text>
+            </View>
+
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Cliente/Zona:</Text>
+              <Text style={styles.formularioValue}>
+                {evaluacion.cliente_zona || "No especificado"}
+              </Text>
+            </View>
+
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>Calificación:</Text>
+              <Text style={styles.formularioValue}>
+                {getCalificacionTexto(evaluacion)}
+              </Text>
+            </View>
+
+            <View style={styles.formularioInfo}>
+              <Text style={styles.formularioLabel}>
+                Fecha evaluación:
+              </Text>
+              <Text style={styles.formularioValue}>
+                {evaluacion.fecha_evaluacion || "Sin fecha"}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.openFormButton}
+              onPress={() => abrirEvaluacion(evaluacion.id)}
+            >
+              <Text style={styles.openFormButtonText}>
+                Abrir Evaluación
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={COLORS.primary}
+              />
+            </TouchableOpacity>
+          </View>
+        ))}
+
+        {/* BOTÓN VER MÁS */}
+        {evaluaciones.length > paginaEvaluaciones * ITEMS_POR_PAGINA && (
+          <TouchableOpacity
+            style={styles.verMasButton}
+            onPress={() => setPaginaEvaluaciones(p => p + 1)}
+          >
+            <Text style={styles.verMasText}>
+              Ver más ({paginaEvaluaciones * ITEMS_POR_PAGINA} de {evaluaciones.length})
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={20}
+              color={COLORS.card}
+            />
+          </TouchableOpacity>
+        )}
+      </>
+    )}
+  </View>
+)}
+
+
+
+        
+{activeTab === "inicio_servicio" && (
+  <View style={styles.section}>
+    <View style={styles.sectionHeader}>
+      {puedeCrearInicioServicio && (
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={InicioServicio}
+        >
+          <Ionicons name="add" size={20} color={COLORS.card} />
+          <Text style={styles.createButtonText}>
+            Crear Planilla Inicio de Servicio
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+
+    {formulariosInicioServicio.length === 0 ? (
+      <View style={styles.emptyState}>
+        <Ionicons
+          name="document-outline"
+          size={48}
+          color={COLORS.textSecondary}
+        />
+        <Text style={styles.emptyStateText}>
+          {puedeCrearInicioServicio
+            ? 'No hay planillas de inicio de servicio. Presiona "Crear Planilla Inicio de Servicio" para comenzar.'
+            : "No hay formularios disponibles."}
+        </Text>
+      </View>
+    ) : (
+      <>
+        {/* LISTADO PAGINADO */}
+        {paginar(formulariosInicioServicio, paginaInicioServicio).map(
+          (formulario) => (
+            <View key={formulario.id} style={styles.formularioCard}>
+              <View style={styles.formularioHeader}>
+                <Text style={styles.formularioTitle}>
+                  PLANILLA DE INICIO DE SERVICIO
+                </Text>
+              </View>
+
+              <View style={styles.formularioInfo}>
+                <Text style={styles.formularioLabel}>Supervisor:</Text>
+                <Text style={styles.formularioValue}>
+                  {formulario.supervisor?.name || "Sin asignar"}
+                </Text>
+              </View>
+
+              <View style={styles.formularioInfo}>
+                <Text style={styles.formularioLabel}>Creado por:</Text>
+                <Text style={styles.formularioValue}>
+                  {formulario.creador?.name || "Usuario desconocido"}
+                </Text>
+              </View>
+
+              <View style={styles.formularioInfo}>
+                <Text style={styles.formularioLabel}>Fecha:</Text>
+                <Text style={styles.formularioValue}>
+                  {new Date(formulario.created_at).toLocaleDateString()}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.openFormButton}
+                onPress={() =>
+                  abrirFormularioInicioServicio(formulario.id)
+                }
+              >
+                <Text style={styles.openFormButtonText}>
+                  Abrir Formulario
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={COLORS.primary}
+                />
+              </TouchableOpacity>
+            </View>
+          )
+        )}
+
+        {/* BOTÓN VER MÁS */}
+        {formulariosInicioServicio.length >
+          paginaInicioServicio * ITEMS_POR_PAGINA && (
+          <TouchableOpacity
+            style={styles.verMasButton}
+            onPress={() =>
+              setPaginaInicioServicio((p) => p + 1)
+            }
+          >
+            <Text style={styles.verMasText}>
+              Ver más (
+              {paginaInicioServicio * ITEMS_POR_PAGINA} de{" "}
+              {formulariosInicioServicio.length})
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={20}
+              color={COLORS.card}
+            />
+          </TouchableOpacity>
+        )}
+      </>
+    )}
+  </View>
+)}
+
+
+      {activeTab === "novedades" && (
+  <View style={styles.section}>
+    {/* BOTÓN CREAR NOVEDAD */}
+    <View style={styles.sectionHeader}>
+      {puedeCrearNovedadesServicio && (
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={NovedadesServicio}
+        >
+          <Ionicons name="add" size={20} color={COLORS.card} />
+          <Text style={styles.createButtonText}>
+            Crear Planilla Novedades de Servicio
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+
+    {/* ESTADO VACÍO */}
+    {novedadesServicio.length === 0 ? (
+      <View style={styles.emptyState}>
+        <Ionicons
+          name="document-outline"
+          size={48}
+          color={COLORS.textSecondary}
+        />
+        <Text style={styles.emptyStateText}>
+          {puedeCrearNovedadesServicio
+            ? 'No hay planillas de novedades de servicio. Presiona "Crear Planilla Novedades de Servicio" para comenzar.'
+            : "No hay formularios disponibles."}
+        </Text>
+      </View>
+    ) : (
+      <>
+        {/* LISTA PAGINADA */}
+        {paginar(novedadesServicio, paginaNovedadesServicio).map(
+          (novedad) => (
+            <View key={novedad.id} style={styles.formularioCard}>
+              <View style={styles.formularioHeader}>
+                <Text style={styles.formularioTitle}>
+                  PLANILLA DE NOVEDADES DE SERVICIO
+                </Text>
+              </View>
+
+              <View style={styles.formularioInfo}>
+                <Text style={styles.formularioLabel}>Supervisor:</Text>
+                <Text style={styles.formularioValue}>
+                  {novedad.supervisor?.name || "Sin asignar"}
+                </Text>
+              </View>
+
+              <View style={styles.formularioInfo}>
+                <Text style={styles.formularioLabel}>Creado por:</Text>
+                <Text style={styles.formularioValue}>
+                  {novedad.creador?.name || "Usuario desconocido"}
+                </Text>
+              </View>
+
+              <View style={styles.formularioInfo}>
+                <Text style={styles.formularioLabel}>Fecha creación:</Text>
+                <Text style={styles.formularioValue}>
+                  {new Date(novedad.created_at).toLocaleDateString()}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.openFormButton}
+                onPress={() =>
+                  abrirFormularioNovedadesServicio(novedad.id)
+                }
+              >
+                <Text style={styles.openFormButtonText}>
+                  Abrir Formulario
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={COLORS.primary}
+                />
+              </TouchableOpacity>
+            </View>
+          )
+        )}
+
+        {/* BOTÓN VER MÁS */}
+        {novedadesServicio.length >
+          paginaNovedadesServicio * ITEMS_POR_PAGINA && (
+          <TouchableOpacity
+            style={styles.verMasButton}
+            onPress={() =>
+              setPaginaNovedadesServicio((p) => p + 1)
+            }
+          >
+            <Text style={styles.verMasText}>
+              Ver más (
+              {paginaNovedadesServicio * ITEMS_POR_PAGINA} de{" "}
+              {novedadesServicio.length})
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={20}
+              color={COLORS.card}
+            />
+          </TouchableOpacity>
+        )}
+      </>
+    )}
+  </View>
+)}
+
       </ScrollView>
 
       {/* Modal para cambiar supervisor */}
@@ -1862,6 +2290,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    marginBottom: 12,
   },
   headerCard: {
     backgroundColor: COLORS.card,
@@ -2018,6 +2447,38 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textTransform: "uppercase",
   },
+  tabsContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  tab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  activeTab: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+
+  tabText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: COLORS.textPrimary,
+  },
+
+  activeTabText: {
+    color: COLORS.card,
+    fontWeight: "700",
+  },
+
   openFormButton: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2326,9 +2787,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.background,
+    backgroundColor: "#167cfc",
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: "white",
     borderRadius: 8,
     padding: 12,
     marginTop: 10,
@@ -2336,8 +2797,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   verMasText: {
-    color: COLORS.primary,
+    color: "white",
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "bold",
   },
 });
